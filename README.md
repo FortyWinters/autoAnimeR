@@ -1,0 +1,2 @@
+# autoAnimeR
+autoAnime in Rust 🦀️
