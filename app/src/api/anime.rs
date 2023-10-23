@@ -1,4 +1,8 @@
-use crate::{Pool, models::anime_list::AnimeListJson, models::anime_broadcast::AnimeBroadcastJson, mods::spider, dao};
+use crate::Pool;
+use crate::dao;
+use crate::mods::spider;
+use crate::models::{anime_list::AnimeListJson, anime_broadcast::AnimeBroadcastJson};
+
 use actix_web::{post, get, web, HttpResponse, Error};
 use anyhow::Result;
 use tera::Context;
@@ -19,11 +23,12 @@ pub async fn update_anime_list_handler(
 pub async fn update_anime_list(
     item: web::Json<spider::UpdateAnimeListJson>,
     pool: web::Data<Pool>
-) -> Result<i32, Error> {
+) -> Result<usize, Error> {
     let mikan = spider::Mikan::new()?;
     let anime_list = mikan.get_anime(item.year, item.season).await?;
     let mut anime_list_json_vec: Vec<AnimeListJson> = Vec::new();
     let mut anime_broadcast_json_vec: Vec<AnimeBroadcastJson> = Vec::new();
+    let mut img_url_vec: Vec<String> = Vec::new();
 
     for anime in &anime_list {
         anime_list_json_vec.push(AnimeListJson {
@@ -39,10 +44,21 @@ pub async fn update_anime_list(
             year     : item.year,
             season   : item.season
         });
+        img_url_vec.push(anime.img_url.clone());
     }
+
     dao::anime_list::add_vec(pool.clone(), anime_list_json_vec).await.unwrap();
     dao::anime_broadcast::add_vec(pool.clone(), anime_broadcast_json_vec).await.unwrap();
-    Ok(1)
+
+    // TODO 需多线程重构
+    let  save_path = "static/img/anime_list".to_string();
+    for img_url in &img_url_vec {
+        if let Err(_) = mikan.download_img(img_url, &save_path).await {
+            println!("download img failed, img_url:{}", img_url);
+        }
+    }
+
+    Ok(anime_list.len())
 }
 
 #[get("/")]

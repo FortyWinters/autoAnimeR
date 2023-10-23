@@ -1,6 +1,4 @@
 use std::error::Error;
-// use std::fs;
-// use std::io::copy;
 use std::collections::HashMap;
 use std::time::Duration;
 use reqwest::Client;
@@ -8,8 +6,8 @@ use select::document::Document;
 use select::predicate::{Name, Predicate, Attr};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncWriteExt;
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Mikan {
     client: Client,
@@ -184,33 +182,35 @@ impl Mikan {
         return Ok(seed_list)
     }
 
-    // async fn download(&self, download_url: &str, save_path: &str, new_name: &str) -> Result<(), Box<dyn Error>> {
-    //     if !fs::metadata(save_path).is_ok() {
-    //         fs::create_dir_all(save_path)?;
-    //     }
+    async fn download(&self, download_url: &str, save_path: &str, new_name: &str) -> Result<(), Box<dyn Error>> {
+        // reference: https://github.com/benkay86/async-applied/blob/master/indicatif-reqwest-tokio/src/bin/indicatif-reqwest-tokio-single.rs
+        if !tokio::fs::metadata(save_path).await.is_ok() {
+            tokio::fs::create_dir_all(save_path).await?;
+        }
 
-    //     let mut response = self.client.get(download_url).send().await?;
-    //     if !response.status().is_success() {
-    //         return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Download failed")));
-    //     }
-    //     let mut file = fs::File::create(format!("{}/{}", save_path, new_name))?;
-    //     copy(&mut response, &mut file)?;
-    //     Ok(())
-    // }
+        let request = self.client.get(download_url);
+        let mut outfile = tokio::fs::File::create(format!("{}/{}", save_path, new_name)).await?;
+        let mut download = request.send().await?;
+        while let Some(chunk) = download.chunk().await? {
+            outfile.write(&chunk).await?;
+        }
+        outfile.flush().await?;
+        Ok(())
+    }
 
-    // pub async fn download_img(&self, img_url: &str, save_path: &str) -> Result<(), Box<dyn Error>> {
-    //     let download_url = format!("{}{}", self.url, img_url);
-    //     let mut parts = img_url.split('/');
-    //     let new_name = parts.nth(4).unwrap();
-    //     self.download(&download_url, save_path, new_name).await
-    // }
+    pub async fn download_img(&self, img_url: &str, save_path: &str) -> Result<(), Box<dyn Error>> {
+        let download_url = format!("{}{}", self.url, img_url);
+        let mut parts = img_url.split('/');
+        let new_name = parts.nth(4).unwrap();
+        self.download(&download_url, save_path, new_name).await
+    }
 
-    // pub async fn download_seed(&self, seed_url: &str, save_path: &str) -> Result<(), Box<dyn Error>> {
-    //     let download_url = format!("{}{}", self.url, seed_url);
-    //     let mut parts = seed_url.split('/');
-    //     let new_name = parts.nth(3).unwrap();
-    //     self.download(&download_url, save_path, new_name).await
-    // }
+    pub async fn download_seed(&self, seed_url: &str, save_path: &str) -> Result<(), Box<dyn Error>> {
+        let download_url = format!("{}{}", self.url, seed_url);
+        let mut parts = seed_url.split('/');
+        let new_name = parts.nth(3).unwrap();
+        self.download(&download_url, save_path, new_name).await
+    }
 }
 
 fn regex_seed_episode(seed_name: &str) -> Result<i32, Box<dyn Error>> {
@@ -242,8 +242,7 @@ fn regex_seed_1080(seed_name: &str) -> bool {
 
 // #[allow(dead_code)]
 // pub fn spider_test() {
-//     let url = format!("https://mikanani.me");
-//     let mikan = Mikan::new(&url).unwrap();
+//     let mikan = Mikan::new().unwrap();
 
 //     let anime_list = mikan.get_anime(2023, 3);
 //     match anime_list {
