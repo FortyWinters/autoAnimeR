@@ -4,7 +4,7 @@ use diesel::{RunQueryDsl, delete};
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use crate::Pool;
-use crate::models::anime_list::{AnimeList, PostAnimeList, AnimeListJson};
+use crate::models::anime_list::*;
 use crate::schema::anime_list::dsl::*;
 
 // insert single data into anime_list

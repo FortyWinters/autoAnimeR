@@ -18,3 +18,5 @@ migrations
 diesel.toml
 
 *.db
+
+*.jpg
