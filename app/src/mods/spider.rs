@@ -1,12 +1,13 @@
 use std::error::Error;
-use std::fs;
-use std::io::copy;
+// use std::fs;
+// use std::io::copy;
 use std::collections::HashMap;
 use std::time::Duration;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use select::document::Document;
 use select::predicate::{Name, Predicate, Attr};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -15,7 +16,7 @@ pub struct Mikan {
     url: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Anime {
     pub mikan_id: i32,
     pub anime_name: String,
@@ -49,23 +50,29 @@ pub struct Broadcast {
     pub season: i32
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateAnimeListJson {
+    pub year: i32,
+    pub season: i32,
+}
+
 #[allow(dead_code)]
 impl Mikan {
-    pub fn new(url: &str) -> Result<Mikan, Box<dyn Error>> {
+    pub fn new() -> Result<Mikan, Box<dyn Error>> {
         let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
-        Ok(Mikan { client, url: url.to_string() })
+        Ok(Mikan { client, url: "https://mikanani.me".to_string() })
     }
 
-    fn request_html(&self, url: &str) -> Result<Document, Box<dyn Error>> {
-        let response = self.client.get(url).send()?;
+    async fn request_html(&self, url: &str) -> Result<Document, Box<dyn Error>> {
+        let response = self.client.get(url).send().await?;
         if !response.status().is_success() {
             return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Request failed")));
         }
-        let body = response.text()?;
+        let body = response.text().await?;
         return Ok(Document::from(body.as_str()))
     }
 
-    pub fn get_anime(&self, year: i32, season: i32) -> Result<Vec<Anime>, Box<dyn Error>> {
+    pub async fn get_anime(&self, year: i32, season: i32) -> Result<Vec<Anime>, Box<dyn Error>> {
         let season_str: &str;
         match season {
             1 => season_str = "%E6%98%A5",  // spring
@@ -74,7 +81,7 @@ impl Mikan {
             _ => season_str = "%E5%86%AC",  // winter
         }
         let url = format!("{}/Home/BangumiCoverFlowByDayOfWeek?year={}&seasonStr={}", self.url, year, season_str);
-        let document = self.request_html(&url)?;
+        let document = self.request_html(&url).await?;
 
         let mut anime_list: Vec<Anime> = Vec::new();
         let mut anime_name_map: HashMap<i32, String> = HashMap::new();
@@ -129,9 +136,9 @@ impl Mikan {
         return Ok(anime_list_res)
     }
 
-    pub fn get_subgroup(&self, mikan_id: i32) -> Result<Vec<Subgroup>, Box<dyn Error>> {
+    pub async fn get_subgroup(&self, mikan_id: i32) -> Result<Vec<Subgroup>, Box<dyn Error>> {
         let url = format!("{}/Home/Bangumi/{}", self.url, mikan_id);
-        let document = self.request_html(&url)?;
+        let document = self.request_html(&url).await?;
         let mut subgroup_list: Vec<Subgroup> = Vec::new();
         for node in document.find(Name("li").and(Attr("class", "leftbar-item"))) {
             let doc = node.find(Name("a"));
@@ -147,9 +154,9 @@ impl Mikan {
         return Ok(subgroup_list)
     }
 
-    pub fn get_seed(&self, mikan_id: i32, subgroup_id: i32) -> Result<Vec<Seed>, Box<dyn Error>> {
+    pub async fn get_seed(&self, mikan_id: i32, subgroup_id: i32) -> Result<Vec<Seed>, Box<dyn Error>> {
         let url = format!("{}/Home/ExpandEpisodeTable?bangumiId={}&subtitleGroupId={}&take=65", self.url, mikan_id, subgroup_id);
-        let document = self.request_html(&url)?;
+        let document = self.request_html(&url).await?;
         let mut seed_list: Vec<Seed> = Vec::new();
         for node in document.find(Name("tr")) {
             let seed_url = node.find(Name("a")).nth(2).and_then(|n| n.attr("href")).map(|href| href.to_string()).unwrap_or_else(|| String::new()); 
@@ -177,33 +184,33 @@ impl Mikan {
         return Ok(seed_list)
     }
 
-    fn download(&self, download_url: &str, save_path: &str, new_name: &str) -> Result<(), Box<dyn Error>> {
-        if !fs::metadata(save_path).is_ok() {
-            fs::create_dir_all(save_path)?;
-        }
+    // async fn download(&self, download_url: &str, save_path: &str, new_name: &str) -> Result<(), Box<dyn Error>> {
+    //     if !fs::metadata(save_path).is_ok() {
+    //         fs::create_dir_all(save_path)?;
+    //     }
 
-        let mut response = self.client.get(download_url).send()?;
-        if !response.status().is_success() {
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Download failed")));
-        }
-        let mut file = fs::File::create(format!("{}/{}", save_path, new_name))?;
-        copy(&mut response, &mut file)?;
-        Ok(())
-    }
+    //     let mut response = self.client.get(download_url).send().await?;
+    //     if !response.status().is_success() {
+    //         return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Download failed")));
+    //     }
+    //     let mut file = fs::File::create(format!("{}/{}", save_path, new_name))?;
+    //     copy(&mut response, &mut file)?;
+    //     Ok(())
+    // }
 
-    pub fn download_img(&self, img_url: &str, save_path: &str) -> Result<(), Box<dyn Error>> {
-        let download_url = format!("{}{}", self.url, img_url);
-        let mut parts = img_url.split('/');
-        let new_name = parts.nth(4).unwrap();
-        self.download(&download_url, save_path, new_name)
-    }
+    // pub async fn download_img(&self, img_url: &str, save_path: &str) -> Result<(), Box<dyn Error>> {
+    //     let download_url = format!("{}{}", self.url, img_url);
+    //     let mut parts = img_url.split('/');
+    //     let new_name = parts.nth(4).unwrap();
+    //     self.download(&download_url, save_path, new_name).await
+    // }
 
-    pub fn download_seed(&self, seed_url: &str, save_path: &str) -> Result<(), Box<dyn Error>> {
-        let download_url = format!("{}{}", self.url, seed_url);
-        let mut parts = seed_url.split('/');
-        let new_name = parts.nth(3).unwrap();
-        self.download(&download_url, save_path, new_name)
-    }
+    // pub async fn download_seed(&self, seed_url: &str, save_path: &str) -> Result<(), Box<dyn Error>> {
+    //     let download_url = format!("{}{}", self.url, seed_url);
+    //     let mut parts = seed_url.split('/');
+    //     let new_name = parts.nth(3).unwrap();
+    //     self.download(&download_url, save_path, new_name).await
+    // }
 }
 
 fn regex_seed_episode(seed_name: &str) -> Result<i32, Box<dyn Error>> {
@@ -233,68 +240,68 @@ fn regex_seed_1080(seed_name: &str) -> bool {
     !str_list.is_empty()
 }
 
-#[allow(dead_code)]
-pub fn spider_test() {
-    let url = format!("https://mikanani.me");
-    let mikan = Mikan::new(&url).unwrap();
+// #[allow(dead_code)]
+// pub fn spider_test() {
+//     let url = format!("https://mikanani.me");
+//     let mikan = Mikan::new(&url).unwrap();
 
-    let anime_list = mikan.get_anime(2023, 3);
-    match anime_list {
-        Ok(res) => {
-            for a in res {
-                println!("{:?}", a);
-            }
-        },
-        Err(err) => {
-            println!("{}", err);
-        }
-    }
+//     let anime_list = mikan.get_anime(2023, 3);
+//     match anime_list {
+//         Ok(res) => {
+//             for a in res {
+//                 println!("{:?}", a);
+//             }
+//         },
+//         Err(err) => {
+//             println!("{}", err);
+//         }
+//     }
 
-    let subgroup_list = mikan.get_subgroup(3060);
-    match subgroup_list {
-        Ok(res) => {
-            for a in res {
-                println!("{:?}", a);
-            }
-        },
-        Err(err) => {
-            println!("{}", err);
-        }
-    }
+//     let subgroup_list = mikan.get_subgroup(3060);
+//     match subgroup_list {
+//         Ok(res) => {
+//             for a in res {
+//                 println!("{:?}", a);
+//             }
+//         },
+//         Err(err) => {
+//             println!("{}", err);
+//         }
+//     }
 
-    let subgroup_list = mikan.get_seed(3060, 615);
-    match subgroup_list {
-        Ok(res) => {
-            for a in res {
-                println!("{:?}", a);
-            }
-        },
-        Err(err) => {
-            println!("{}", err);
-        }
-    }
+//     let subgroup_list = mikan.get_seed(3060, 615);
+//     match subgroup_list {
+//         Ok(res) => {
+//             for a in res {
+//                 println!("{:?}", a);
+//             }
+//         },
+//         Err(err) => {
+//             println!("{}", err);
+//         }
+//     }
 
-    let img_url = format!("/images/Bangumi/202307/f94fdb7f.jpg");
-    let img_save_path = format!("img/3060");
-    let res = mikan.download_img(&img_url, &img_save_path);
-    match res {
-        Ok(_) => {
-            println!("ok");
-        },
-        Err(err) => {
-            println!("{}", err);
-        }
-    }
+//     let img_url = format!("/images/Bangumi/202307/f94fdb7f.jpg");
+//     let img_save_path = format!("img/3060");
+//     let res = mikan.download_img(&img_url, &img_save_path);
+//     match res {
+//         Ok(_) => {
+//             println!("ok");
+//         },
+//         Err(err) => {
+//             println!("{}", err);
+//         }
+//     }
 
-    let seed_url = format!("/Download/20230913/dfe6eb7c5f780e90f74244a498949375c67143b0.torrent");
-    let seed_save_path = format!("seed/3060");
-    let res = mikan.download_seed(&seed_url, &seed_save_path);
-    match res {
-        Ok(_) => {
-            println!("ok");
-        },
-        Err(err) => {
-            println!("{}", err);
-        }
-    }
-}
+//     let seed_url = format!("/Download/20230913/dfe6eb7c5f780e90f74244a498949375c67143b0.torrent");
+//     let seed_save_path = format!("seed/3060");
+//     let res = mikan.download_seed(&seed_url, &seed_save_path);
+//     match res {
+//         Ok(_) => {
+//             println!("ok");
+//         },
+//         Err(err) => {
+//             println!("{}", err);
+//         }
+//     }
+// }

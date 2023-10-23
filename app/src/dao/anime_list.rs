@@ -1,58 +1,86 @@
-use crate::{Pool, models::anime_list::AnimeListJson};
 use actix_web::web;
-use crate::models::anime_list::{AnimeList, PostAnimeList};
 use anyhow::Result;
 use diesel::{RunQueryDsl, delete};
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
+use crate::Pool;
+use crate::models::anime_list::{AnimeList, PostAnimeList, AnimeListJson};
+use crate::schema::anime_list::dsl::*;
 
-pub async fn add_single_anime_list(
+// insert single data into anime_list
+#[allow(dead_code)]
+pub async fn add(
     pool: web::Data<Pool>,
-    item: web::Json<AnimeListJson>
+    item: AnimeListJson
 ) -> Result<AnimeList, diesel::result::Error> {
-    use crate::schema::anime_list::dsl::*;
     let db_connection = pool.get().unwrap();
-    match anime_list
-        .filter(anime_name.eq(&item.anime_name))
-        .first::<AnimeList>(&db_connection) {
-            Ok(result) => Ok(result),
-            Err(_) => {
-                let new_anime_list = PostAnimeList{
-                    mikan_id: &item.mikan_id,
-                    anime_name: &item.anime_name,
-                    img_url: &item.img_url,
-                    update_day: &item.update_day,
-                    anime_type: &item.anime_type,
-                    subscribe_status: &item.subscribe_status
-                };
-                insert_into(anime_list)
-                    .values(&new_anime_list)
-                    .execute(&db_connection)
-                    .expect("Error saving new anime");
-                let result = anime_list.order(id.desc())
-                    .first(&db_connection).unwrap(); 
-                Ok(result)
-            }
+    match anime_list.filter(mikan_id.eq(&item.mikan_id)).first::<AnimeList>(&db_connection) {
+        Ok(result) => Ok(result),
+        Err(_) => {
+            let new_anime_list = PostAnimeList{
+                mikan_id        : &item.mikan_id,
+                anime_name      : &item.anime_name,
+                img_url         : &item.img_url,
+                update_day      : &item.update_day,
+                anime_type      : &item.anime_type,
+                subscribe_status: &item.subscribe_status
+            };
+            insert_into(anime_list)
+                .values(&new_anime_list)
+                .execute(&db_connection)
+                .expect("Error saving new anime");
+            let result = anime_list.order(id.desc())
+                .first(&db_connection).unwrap(); 
+            Ok(result)
         }
+    }
 }
 
+// insert Vec<data> into anime_list
+pub async fn add_vec(
+    pool: web::Data<Pool>,
+    item_vec: Vec<AnimeListJson>
+) -> Result<i32, diesel::result::Error> {
+    use crate::schema::anime_list::dsl::*;
+    let db_connection = pool.get().unwrap();
+    let mut sucess_num: i32 = 0;
+
+    for item in &item_vec {
+        if let Err(_) = anime_list.filter(mikan_id.eq(&item.mikan_id)).first::<AnimeList>(&db_connection) {
+            let new_anime_list = PostAnimeList{
+                mikan_id        : &item.mikan_id,
+                anime_name      : &item.anime_name,
+                img_url         : &item.img_url,
+                update_day      : &item.update_day,
+                anime_type      : &item.anime_type,
+                subscribe_status: &item.subscribe_status
+            };
+            insert_into(anime_list)
+                .values(&new_anime_list)
+                .execute(&db_connection)
+                .expect("save failed");
+            sucess_num += 1;
+        }
+    }
+    Ok(sucess_num)
+}
+
+// query all data from anime_list
 pub async fn get_all(
     pool: web::Data<Pool>
 ) -> Result<Vec<AnimeList>, diesel::result::Error> {
-    use crate::schema::anime_list::dsl::*;
     let db_connection = pool.get().unwrap();
     let result: Vec<AnimeList> = anime_list.load::<AnimeList>(&db_connection)?;
     Ok(result)
 }
 
-pub async fn del(
+// delete single data by mikan_id
+#[allow(dead_code)]
+pub async fn del_by_mikan_id(
     pool: web::Data<Pool>,
-    path: web::Path<String>
+    i: i32, 
 ) -> Result<usize, diesel::result::Error> {
-    use crate::schema::anime_list::dsl::*;
     let db_connection = pool.get().unwrap();
-    let id_string = path.into_inner();
-    let i: i32 = id_string.parse().unwrap();
     let result = delete(anime_list.filter(mikan_id.eq(i))).execute(&db_connection)?;
     Ok(result)
 }

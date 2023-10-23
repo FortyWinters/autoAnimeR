@@ -11,9 +11,8 @@ use crate::api::anime::*;
 pub fn anime_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/anime")
-            .service(add_anime_list)
-            .service(get_all_anime_list)
-            .service(del_anime_list)
+            .service(get_all_anime_list_handler)
             .service(index)
+            .service(update_anime_list_handler)
     );
 }
