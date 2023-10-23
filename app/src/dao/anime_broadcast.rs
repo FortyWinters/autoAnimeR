@@ -14,7 +14,9 @@ pub async fn add(
     item: AnimeBroadcastJson
 ) -> Result<AnimeBroadcast, diesel::result::Error> {
     let db_connection = &mut pool.get().unwrap();
-    match anime_broadcast.filter(mikan_id.eq(&item.mikan_id)).first::<AnimeBroadcast>(db_connection) {
+    match anime_broadcast
+        .filter(mikan_id.eq(&item.mikan_id))
+        .first::<AnimeBroadcast>(db_connection) {
         Ok(result) => Ok(result),
         Err(_) => {
             let new_anime_broadcast = PostAnimeBroadcast{
@@ -43,7 +45,9 @@ pub async fn add_vec(
     let mut sucess_num: i32 = 0;
 
     for item in &item_vec {
-        if let Err(_) = anime_broadcast.filter(mikan_id.eq(&item.mikan_id)).first::<AnimeBroadcast>(db_connection) {
+        if let Err(_) = anime_broadcast
+            .filter(mikan_id.eq(&item.mikan_id))
+            .first::<AnimeBroadcast>(db_connection) {
             let new_anime_broadcast = PostAnimeBroadcast{
                 mikan_id : &item.mikan_id,
                 year     : &item.year,
@@ -57,6 +61,19 @@ pub async fn add_vec(
         }
     }
     Ok(sucess_num)
+}
+
+pub async fn get_by_year_season(
+    pool: web::Data<Pool>,
+    query_year: i32,
+    query_season: i32
+) -> Result<Vec<AnimeBroadcast>, diesel::result::Error> {
+    let db_connection = &mut pool.get().unwrap();
+    let result: Vec<AnimeBroadcast> = anime_broadcast
+        .filter(year.eq(query_year))
+        .filter(season.eq(query_season))
+        .load::<AnimeBroadcast>(db_connection)?;
+    Ok(result)
 }
 
 // query all data from anime_broadcast

@@ -4,8 +4,8 @@ use tera::Context;
 use crate::Pool;
 use crate::dao;
 use crate::mods::spider;
-use crate::models::{anime_list::AnimeListJson, anime_broadcast::AnimeBroadcastJson};
-
+use crate::models::anime_list;
+use crate::models::anime_broadcast;
 
 #[post("/update_anime_list")]
 pub async fn update_anime_list_handler(
@@ -26,12 +26,12 @@ pub async fn update_anime_list(
 ) -> Result<usize, Error> {
     let mikan = spider::Mikan::new()?;
     let anime_list = mikan.get_anime(item.year, item.season).await?;
-    let mut anime_list_json_vec: Vec<AnimeListJson> = Vec::new();
-    let mut anime_broadcast_json_vec: Vec<AnimeBroadcastJson> = Vec::new();
+    let mut anime_list_json_vec: Vec<anime_list::AnimeListJson> = Vec::new();
+    let mut anime_broadcast_json_vec: Vec<anime_broadcast::AnimeBroadcastJson> = Vec::new();
     let mut img_url_vec: Vec<String> = Vec::new();
 
     for anime in &anime_list {
-        anime_list_json_vec.push(AnimeListJson {
+        anime_list_json_vec.push(anime_list::AnimeListJson {
             mikan_id         : anime.mikan_id,
             anime_name       : anime.anime_name.clone(),
             img_url          : anime.img_url.clone(),
@@ -39,7 +39,7 @@ pub async fn update_anime_list(
             anime_type       : anime.anime_type,
             subscribe_status : anime.subscribe_status,
         });
-        anime_broadcast_json_vec.push(AnimeBroadcastJson {
+        anime_broadcast_json_vec.push(anime_broadcast::AnimeBroadcastJson {
             mikan_id : anime.mikan_id,
             year     : item.year,
             season   : item.season
@@ -60,6 +60,43 @@ pub async fn update_anime_list(
 
     Ok(anime_list.len())
 }
+
+#[get("/{url_year}/{url_season}")]
+pub async fn anime_list_by_broadcast_handler(
+    pool: web::Data<Pool>,
+    tera: web::Data<tera::Tera>,
+    path: web::Path<(String, String)>
+) -> Result<HttpResponse, Error> {
+    let anime_list = anime_list_by_broadcast(pool, path).await.unwrap();
+    let mut context = Context::new();
+    context.insert("anime_list", &anime_list);
+    let rendered = tera.render("anime.html", &context).expect("Failed to render template");
+    Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
+}
+
+pub async fn anime_list_by_broadcast(
+    pool: web::Data<Pool>,
+    path: web::Path<(String, String)>
+) -> Result<Vec<anime_list::AnimeList>, Error> {
+    let path_year = &path.0;
+    let path_season = &path.1;
+    let year: i32 = path_year.to_string().parse().unwrap();
+    let season: i32 = path_season.to_string().parse().unwrap();
+    let broadcast_list: Vec<anime_broadcast::AnimeBroadcast> = dao::anime_broadcast::get_by_year_season(pool.clone(), year, season).await.unwrap();
+    let mut anime_list: Vec<anime_list::AnimeList> = Vec::new();
+    for anime in &broadcast_list {
+        anime_list.push(dao::anime_list::get_by_mikanid(pool.clone(), anime.mikan_id).await.unwrap());
+    }
+
+    for anime in anime_list.iter_mut() {
+        let mut parts = anime.img_url.split('/');
+        let img_name = parts.nth(4).unwrap();
+        anime.img_url = format!("/static/img/anime_list/{}", img_name);
+    }
+    // TODO 番剧排序
+    Ok(anime_list)
+}
+
 
 #[get("/")]
 pub async fn index(

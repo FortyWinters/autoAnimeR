@@ -14,8 +14,7 @@
         <li>
             <div class="anime-container">
                 <a href="/anime/detail/{{ anime.mikan_id }}">
-                    {%set %}
-                    <img src="{{ '/static/mg/anime_list/' ~ anime.img_url.split('/')[4] }}" alt="" height="280px" width="210px">
+                    <img src="{{ anime.img_url }}" alt="" height="280px" width="210px">
                 </a>
                 <div class="anime-info">
                     <div class="anime-name" title="{{ anime.anime_name }}">{{ anime.anime_name }}</div>

@@ -8,5 +8,6 @@ pub fn anime_routes(cfg: &mut web::ServiceConfig) {
             .service(index)
             .service(update_anime_list_handler)
             .service(get_all_anime_broadcast_handler)
+            .service(anime_list_by_broadcast_handler)
     );
 }
