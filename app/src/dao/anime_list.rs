@@ -13,8 +13,8 @@ pub async fn add(
     pool: web::Data<Pool>,
     item: AnimeListJson
 ) -> Result<AnimeList, diesel::result::Error> {
-    let db_connection = pool.get().unwrap();
-    match anime_list.filter(mikan_id.eq(&item.mikan_id)).first::<AnimeList>(&db_connection) {
+    let db_connection = &mut pool.get().unwrap();
+    match anime_list.filter(mikan_id.eq(&item.mikan_id)).first::<AnimeList>(db_connection) {
         Ok(result) => Ok(result),
         Err(_) => {
             let new_anime_list = PostAnimeList{
@@ -27,10 +27,10 @@ pub async fn add(
             };
             insert_into(anime_list)
                 .values(&new_anime_list)
-                .execute(&db_connection)
+                .execute(db_connection)
                 .expect("Error saving new anime");
             let result = anime_list.order(id.desc())
-                .first(&db_connection).unwrap(); 
+                .first(db_connection).unwrap(); 
             Ok(result)
         }
     }
@@ -42,11 +42,11 @@ pub async fn add_vec(
     item_vec: Vec<AnimeListJson>
 ) -> Result<i32, diesel::result::Error> {
     use crate::schema::anime_list::dsl::*;
-    let db_connection = pool.get().unwrap();
+    let db_connection = &mut pool.get().unwrap();
     let mut sucess_num: i32 = 0;
 
     for item in &item_vec {
-        if let Err(_) = anime_list.filter(mikan_id.eq(&item.mikan_id)).first::<AnimeList>(&db_connection) {
+        if let Err(_) = anime_list.filter(mikan_id.eq(&item.mikan_id)).first::<AnimeList>(db_connection) {
             let new_anime_list = PostAnimeList{
                 mikan_id        : &item.mikan_id,
                 anime_name      : &item.anime_name,
@@ -57,7 +57,7 @@ pub async fn add_vec(
             };
             insert_into(anime_list)
                 .values(&new_anime_list)
-                .execute(&db_connection)
+                .execute(db_connection)
                 .expect("save failed");
             sucess_num += 1;
         }
@@ -69,8 +69,8 @@ pub async fn add_vec(
 pub async fn get_all(
     pool: web::Data<Pool>
 ) -> Result<Vec<AnimeList>, diesel::result::Error> {
-    let db_connection = pool.get().unwrap();
-    let result: Vec<AnimeList> = anime_list.load::<AnimeList>(&db_connection)?;
+    let db_connection = &mut pool.get().unwrap();
+    let result: Vec<AnimeList> = anime_list.load::<AnimeList>(db_connection)?;
     Ok(result)
 }
 
@@ -80,7 +80,7 @@ pub async fn del_by_mikan_id(
     pool: web::Data<Pool>,
     i: i32, 
 ) -> Result<usize, diesel::result::Error> {
-    let db_connection = pool.get().unwrap();
-    let result = delete(anime_list.filter(mikan_id.eq(i))).execute(&db_connection)?;
+    let db_connection = &mut pool.get().unwrap();
+    let result = delete(anime_list.filter(mikan_id.eq(i))).execute(db_connection)?;
     Ok(result)
 }
