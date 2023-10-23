@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}番剧列表{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="/static/css/anime.css">
+    <script src="/static/jquery/jquery.3.7.1.min.js"></script>
+    <script src="/static/js/anime.js"></script>
+{% endblock %}
+
+{% block body %}
+    <ul>
+    {% for anime in anime_list %}
+        <li>
+            <div class="anime-container">
+                <a href="/anime/detail/{{ anime.mikan_id }}">
+                    {%set %}
+                    <img src="{{ '/static/mg/anime_list/' ~ anime.img_url.split('/')[4] }}" alt="" height="280px" width="210px">
+                </a>
+                <div class="anime-info">
+                    <div class="anime-name" title="{{ anime.anime_name }}">{{ anime.anime_name }}</div>
+                    <div class="button-container">
+                    {% if anime.subscribe_status==1 %}
+                        <button class="subscribe-button" id="{{ anime.mikan_id }}" subscribe_status="{{ anime.subscribe_status }}" style="background-color:red;">
+                            <img src="/static/img/icon/subscribe.svg" alt="" width="20px" height="20px">
+                        </button>
+                    {% else %}
+                        <button class="subscribe-button" id="{{ anime.mikan_id }}" subscribe_status="{{ anime.subscribe_status }}">
+                            <img src="/static/img/icon/subscribe.svg" alt="" width="20px" height="20px">
+                        </button>
+                    {% endif %}   
+                    </div>
+                </div>
+            </div>
+        </li>
+    {% endfor %}
+    </ul>   
+{% endblock %}

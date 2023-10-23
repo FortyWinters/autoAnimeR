@@ -1,11 +1,11 @@
+use actix_web::{post, get, web, HttpResponse, Error};
+use anyhow::Result;
+use tera::Context;
 use crate::Pool;
 use crate::dao;
 use crate::mods::spider;
 use crate::models::{anime_list::AnimeListJson, anime_broadcast::AnimeBroadcastJson};
 
-use actix_web::{post, get, web, HttpResponse, Error};
-use anyhow::Result;
-use tera::Context;
 
 #[post("/update_anime_list")]
 pub async fn update_anime_list_handler(
