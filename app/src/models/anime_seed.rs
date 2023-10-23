@@ -3,18 +3,19 @@ use crate::schema::*;
 
 #[derive(Debug, Serialize, Deserialize, Queryable)]
 pub struct AnimeSeed {
+    pub id: Option<i32>,
     pub mikan_id: i32,
     pub subgroup_id: i32,
     pub episode: i32,
     pub seed_name: String,
     pub seed_url: String,
     pub seed_status: i32,
-    pub seed_size: String,
+    pub seed_size: String
 }
 
 #[derive(Debug, Insertable)]
 #[table_name = "anime_seed"]
-pub struct PostAnimeList<'a> {
+pub struct PostAnimeSeed<'a> {
     pub mikan_id: &'a i32,
     pub subgroup_id: &'a i32,
     pub episode: &'a i32,
@@ -25,11 +26,12 @@ pub struct PostAnimeList<'a> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AnimeListJson {
+pub struct AnimeSeedJson {
     pub mikan_id: i32,
-    pub anime_name: String,
-    pub update_day: i32,
-    pub img_url: String,
-    pub anime_type: i32,
-    pub subscribe_status: i32
+    pub subgroup_id: i32,
+    pub episode: i32,
+    pub seed_name: String,
+    pub seed_url: String,
+    pub seed_status: i32,
+    pub seed_size: String
 }
