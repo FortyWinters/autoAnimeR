@@ -67,10 +67,9 @@ pub async fn add_bulk(
 
 #[allow(dead_code)]
 pub async fn get_exist_anime_task_by_mikan_id(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: i32 // mikan_id
 ) -> Result<Vec<AnimeTask>, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     match anime_task.filter(mikan_id.eq(&item)).load::<AnimeTask>(db_connection) {
         Ok(result) => Ok(result),
         Err(e) => Err(e)
@@ -201,7 +200,8 @@ mod test {
             .expect("Failed to create pool.");
         
         let pool = web::Data::new(database_pool);
-        let r = get_exist_anime_task_by_mikan_id(pool, 123).await.unwrap();
+        let db_connection = &mut pool.get().unwrap();
+        let r = get_exist_anime_task_by_mikan_id(db_connection, 123).await.unwrap();
         // let r = get_exist_anime_task_by_torrent_name(pool, "test_torrent_name".to_string()).await.unwrap();
         println!("{:?}", r);
     }

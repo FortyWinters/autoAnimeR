@@ -8,7 +8,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Mikan {
     client: Client,
     url: String,

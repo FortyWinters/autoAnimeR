@@ -3,6 +3,7 @@ use chrono::format::Item;
 use diesel::{RunQueryDsl, delete};
 use diesel::dsl::{insert_into, update};
 use diesel::prelude::*;
+use diesel::r2d2::{PooledConnection, ConnectionManager};
 use crate::Pool;
 use crate::models::anime_seed::*;
 use crate::schema::anime_seed::dsl::*;
@@ -43,10 +44,9 @@ pub async fn add(
 
 #[allow(dead_code)]
 pub async fn add_bulk(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item_vec: Vec<AnimeSeedJson>
 ) -> Result<i32, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     let mut success_num: i32 = 0;
 
     for item in &item_vec {
@@ -87,10 +87,9 @@ pub async fn update_anime_seed_status(
 
 #[allow(dead_code)]
 pub async fn get_anime_seed_by_mikan_id(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: i32 // mikan_id
 ) -> Result<Vec<AnimeSeed>, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     match anime_seed.filter(mikan_id.eq(&item)).load::<AnimeSeed>(db_connection) {
         Ok(result) => Ok(result),
         Err(e) => Err(e)
@@ -131,6 +130,20 @@ pub async fn delete_anime_seed_by_seed_url(
         .execute(db_connection)
         .expect("Error deleting anime_task");
     Ok(())
+}
+
+pub async fn get_by_mikanid_subgeoupid(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_mikanid: i32,
+    query_subgroup: i32
+) -> Result<Vec<AnimeSeed>, diesel::result::Error> {
+    match anime_seed
+        .filter(mikan_id.eq(&query_mikanid))
+        .filter(subgroup_id.eq(&query_subgroup))
+        .load::<AnimeSeed>(db_connection) {
+        Ok(result) => Ok(result),
+        Err(e) => Err(e)
+    }
 }
 
 #[cfg(test)]
@@ -192,8 +205,8 @@ mod test {
                 seed_status: 0,
                 seed_size: "test_seed_size_1".to_string()
             }];
-
-        add_bulk(pool, test_anime_seed_json).await.unwrap();
+        let db_connection = &mut pool.get().unwrap();
+        add_bulk(db_connection, test_anime_seed_json).await.unwrap();
     }
 
     #[tokio::test]
@@ -219,7 +232,8 @@ mod test {
             .expect("Failed to create pool.");
         
         let pool = web::Data::new(database_pool);
-        let r = get_anime_seed_by_mikan_id(pool, 123).await.unwrap();
+        let db_connection = &mut pool.get().unwrap();
+        let r = get_anime_seed_by_mikan_id(db_connection, 123).await.unwrap();
         // let r = get_anime_seed_by_seed_url(pool, "test_seed_url_1".to_string()).await.unwrap();
         println!("{:?}", r);
     }

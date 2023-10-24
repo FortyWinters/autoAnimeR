@@ -3,12 +3,17 @@ use anyhow::Result;
 use tera::Context;
 use chrono::{Local, Datelike};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
+use diesel::r2d2::{PooledConnection, ConnectionManager};
+use diesel::SqliteConnection;
 use crate::Pool;
 use crate::dao;
 use crate::mods::spider;
 use crate::models::anime_list;
 use crate::models::anime_broadcast;
+use crate::models::anime_seed;
+use crate::models::anime_subgroup;
+use crate::schema::anime_seed::{seed_status, episode};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateAnimeListJson {
@@ -239,6 +244,23 @@ pub async fn cancel_subscribe_anime(
     }
 }
 
+#[get("/")]
+pub async fn my_anime_index_handler(
+    tera: web::Data<tera::Tera>,
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
+    let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };
+    let anime_list = my_anime(pool).await.unwrap();
+    let broadcast_map = get_broadcast_map().await;
+    let mut context = Context::new();
+    context.insert("anime_list", &anime_list);
+    context.insert("broadcast_map", &broadcast_map);
+    context.insert("broadcast_url", &broadcast_url);
+    context.insert("page_flag", &0);
+    let rendered = tera.render("anime.html", &context).expect("Failed to render template");
+    Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
+}
+
 #[get("")]
 pub async fn my_anime_handler(
     tera: web::Data<tera::Tera>,
@@ -286,28 +308,198 @@ pub async fn my_anime(
     Ok(anime_vec)
 }   
 
-// #[get("/get_all_anime_list")]
-// pub async fn get_all_anime_list_handler(
-//     pool: web::Data<Pool>
-// ) -> Result<HttpResponse, Error> {
-//     Ok(
-//         match dao::anime_list::get_all(pool)
-//             .await {
-//                 Ok(anime_list) => HttpResponse::Created().json(anime_list),
-//                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
-//             },
-//     )
-// }
 
-// #[get("/get_all_anime_broadcast")]
-// pub async fn get_all_anime_broadcast_handler(
-//     pool: web::Data<Pool>
-// ) -> Result<HttpResponse, Error> {
-//     Ok(
-//         match dao::anime_broadcast::get_all(pool)
-//             .await {
-//                 Ok(anime_broadcast) => HttpResponse::Created().json(anime_broadcast),
-//                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
-//             },
-//     )
-// }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateAnimeSeedJson {
+    pub mikan_id: i32,
+}
+
+#[post("/update_anime_seed")]
+pub async fn update_anime_seed_handler(
+    item: web::Json<UpdateAnimeSeedJson>,
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
+    Ok(
+        match get_anime_seed(item.mikan_id, db_connection)
+            .await {
+                Ok(seed_number) => HttpResponse::Created().json(seed_number),
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+// TODO 单线程需重构
+pub async fn get_anime_seed(    
+    mikan_id: i32,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<usize, Error> {
+    let mikan = spider::Mikan::new()?;
+    let mut seed_vec: Vec<anime_seed::AnimeSeedJson> = Vec::new();
+    let subgroup_list = mikan.get_subgroup(mikan_id).await.expect("get subgroup failed");
+    for subgroup in &subgroup_list {
+        if let Ok(seed_list) = get_seed_by_subgroup(mikan.clone(), mikan_id, subgroup.subgroup_id).await {
+            seed_vec.extend(seed_list);
+        }
+    }
+    let number = seed_vec.len();
+    dao::anime_seed::add_bulk(db_connection, seed_vec).await.unwrap();
+    let anime_subgroup_list = convert_spider_subgroup_to_anime_subgroup(subgroup_list);
+    dao::anime_subgroup::add_vec(db_connection, anime_subgroup_list).await.unwrap();
+    Ok(number)
+}
+
+pub async fn get_seed_by_subgroup(
+    mikan: spider::Mikan,
+    mikan_id: i32,
+    subgroup_id: i32
+) -> Result<Vec<anime_seed::AnimeSeedJson>, Error> {
+    let seed_list: Vec<spider::Seed> = mikan.get_seed(mikan_id, subgroup_id).await.unwrap();
+    Ok(convert_spider_seed_to_anime_seed(seed_list))
+}
+
+fn convert_spider_seed_to_anime_seed(spider_vec: Vec<spider::Seed>) -> Vec<anime_seed::AnimeSeedJson> {
+    spider_vec.into_iter().map(|s| anime_seed::AnimeSeedJson {     
+        mikan_id    : s.mikan_id,
+        subgroup_id : s.subgroup_id,
+        episode     : s.episode,
+        seed_name   : s.seed_name,
+        seed_url    : s.seed_url,
+        seed_status : s.seed_status,
+        seed_size   : s.seed_size 
+    }).collect()
+}
+
+fn convert_spider_subgroup_to_anime_subgroup(spider_vec: Vec<spider::Subgroup>) -> Vec<anime_subgroup::AnimeSubgroupJson> {
+    spider_vec.into_iter().map(|s| anime_subgroup::AnimeSubgroupJson {     
+        subgroup_name : s.subgroup_name,
+        subgroup_id   : s.subgroup_id,
+    }).collect()
+}
+
+#[get("/detail/{mikan_id}")]
+pub async fn anime_detail_handler(
+    pool: web::Data<Pool>,
+    tera: web::Data<tera::Tera>,
+    path: web::Path<String>
+) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
+    let path_mikan_id = &path;
+    let path_mikan_id: i32 = path_mikan_id.to_string().parse().unwrap();
+
+    let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };
+    let broadcast_map = get_broadcast_map().await;
+    let (anime, subgroup_with_seed_list) = get_anime_seed_group_by_subgroup(path_mikan_id, db_connection).await.unwrap();
+    let mut context = Context::new();
+    context.insert("anime", &anime);
+    context.insert("subgroup_with_seed_list", &subgroup_with_seed_list);
+    context.insert("broadcast_map", &broadcast_map);
+    context.insert("broadcast_url", &broadcast_url);
+    context.insert("page_flag", &0);
+    let rendered = tera.render("test.html", &context).expect("Failed to render template");
+    Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubgroupWithSeed {
+    pub subgroup_id: i32,
+    pub subgroup_name: String,
+    pub seed_list: Vec<SeedWithTask>
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SeedWithTask {
+    pub seed: anime_seed::AnimeSeed,
+    pub status: i32
+}
+// 0: unused/grey
+// 1: failed/black
+// 2: downloading/blue
+// 3: downloaded/green
+
+pub async fn get_anime_seed_group_by_subgroup(
+    mikan_id: i32,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<(anime_list::AnimeList, Vec<SubgroupWithSeed>), Error> {
+    let mut anime = dao::anime_list::get_by_mikanid(db_connection, mikan_id).await.unwrap();
+    let mut parts = anime.img_url.split('/');
+    let img_name = parts.nth(4).unwrap();
+    anime.img_url = format!("/static/img/anime_list/{}", img_name);
+
+    let task_list = dao::anime_task::get_exist_anime_task_by_mikan_id(db_connection, mikan_id).await.unwrap();
+    let mut task_episode_map: HashMap<i32, i32> = HashMap::new();
+    let mut task_url_map: HashMap<String, i32> = HashMap::new();
+    for task in task_list {
+        task_episode_map.insert(task.episode, task.qb_task_status);
+        task_url_map.insert(task.torrent_name, task.qb_task_status);
+    }   
+    
+    let mut subgroup_with_seed_list: Vec<SubgroupWithSeed> = Vec::new();
+    let seed_list = dao::anime_seed::get_anime_seed_by_mikan_id(db_connection, mikan_id).await.unwrap();
+    let mut seed_episode_set: HashSet<i32> = HashSet::new();
+    for seed in seed_list {
+        seed_episode_set.insert(seed.episode);
+    }
+
+    let mut seed_list_0: Vec<SeedWithTask> = Vec::new();
+    for epi in seed_episode_set {
+        let seed = anime_seed::AnimeSeed {
+            id          : Some(0),
+            mikan_id,
+            subgroup_id : 0,
+            episode     : epi,
+            seed_name   : "null".to_string(),
+            seed_url    : "null".to_string(),
+            seed_status : 0,
+            seed_size   : "null".to_string()
+        };
+
+        let epi_status: i32;
+        if let Some(status) = task_episode_map.get(&epi) {
+            epi_status = *status + 2;
+        } else {
+            epi_status = 0;
+        }
+
+        seed_list_0.push(SeedWithTask { 
+            seed, 
+            status: epi_status   
+        });
+    }
+    subgroup_with_seed_list.push(SubgroupWithSeed {
+        subgroup_id: 0,
+        subgroup_name: "更新集数".to_string(),
+        seed_list: seed_list_0
+    });
+
+    let subgroup_list = dao::anime_subgroup::get_all(db_connection).await.unwrap();
+    for subgroup in subgroup_list {
+        let seed_list = dao::anime_seed::get_by_mikanid_subgeoupid(db_connection, mikan_id, subgroup.subgroup_id).await.unwrap();
+        let mut seed_with_task_list: Vec<SeedWithTask> = Vec::new();
+        for seed in seed_list {
+            let status: i32;
+            if seed.seed_status == 0 {
+                status = 0;
+            } else {
+                if let Some(task_status) = task_url_map.get(&seed.seed_url) {
+                    status = *task_status + 2;
+                } else {
+                    status = 1;
+                }
+            }
+            seed_with_task_list.push(SeedWithTask { 
+                seed, 
+                status
+            });
+        }
+        seed_with_task_list.sort_by_key(|a| a.seed.episode);
+        subgroup_with_seed_list.push(SubgroupWithSeed { 
+            subgroup_id   : subgroup.subgroup_id, 
+            subgroup_name : subgroup.subgroup_name, 
+            seed_list     : seed_with_task_list
+        })
+    }
+    subgroup_with_seed_list.sort_by_key(|a| a.subgroup_id);
+    
+    Ok((anime, subgroup_with_seed_list))
+}

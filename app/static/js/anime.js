@@ -28,7 +28,7 @@ $(function() {
     });
 
     $('button.update-button').on('click', function() {
-        var mikanId = $(this).attr('id');
+        var mikanId = parseInt($(this).attr('id'));
         var animeType = $(this).attr('type');
         this.disabled = true;
         this.style.backgroundColor = "#d6d6d6";
@@ -139,8 +139,17 @@ function deleteAnimeData(mikanId) {
     });
 }
 
-function getAnimeSeed(mikanId, animeType) {
-    fetch("/anime/insert_anime_seed_thread?mikan_id=" + mikanId + '&anime_type=' + animeType, {method: 'POST'})
+function getAnimeSeed(mikanId) {
+    const data = {
+        mikan_id: mikanId
+    };
+    fetch("/anime/update_anime_seed", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
     .then(response => response.json())
     .then(data => {
         console.log(data)

@@ -30,6 +30,28 @@ pub async fn add(
     }
 }
 
+// insert Vec<data> into anime_subgroup
+pub async fn add_vec(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    item_vec: Vec<AnimeSubgroupJson>
+) -> Result<i32, diesel::result::Error> {
+    let mut sucess_num: i32 = 0;
+    for item in &item_vec {
+        if let Err(_) = anime_subgroup.filter(subgroup_id.eq(&item.subgroup_id)).first::<AnimeSubgroup>(db_connection) {
+            let new_anime_subgroup = PostAnimeSubgroup{
+                subgroup_id   : &item.subgroup_id,
+                subgroup_name : &item.subgroup_name,
+            };
+            insert_into(anime_subgroup)
+                .values(&new_anime_subgroup)
+                .execute(db_connection)
+                .expect("save failed");
+            sucess_num += 1;
+        }
+    }
+    Ok(sucess_num)
+}
+
 // get data by subgroup_id
 pub async fn get_by_subgroupid(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
