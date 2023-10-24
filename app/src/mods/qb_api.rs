@@ -13,6 +13,7 @@ pub struct QbitTaskExecutor {
     pub cookie: String,
 }
 
+#[allow(dead_code)]
 impl QbitTaskExecutor {
     pub async fn new_with_login(username: String, password: String) -> Result<Self, Error>
     {
@@ -365,6 +366,7 @@ pub struct AnimeSeedInfo {
     pub seed_size: String
 }
 
+#[allow(dead_code)]
 impl MikanTorrentsInfos {
     pub async fn new(anime_seed: AnimeSeedInfo, ) -> Self {
         
