@@ -1,14 +1,13 @@
-use actix::fut::result;
 use actix_web::web;
-use anyhow::Result;
+use chrono::format::Item;
 use diesel::{RunQueryDsl, delete};
-use diesel::dsl::insert_into;
+use diesel::dsl::{insert_into, update};
 use diesel::prelude::*;
 use crate::Pool;
 use crate::models::anime_seed::*;
 use crate::schema::anime_seed::dsl::*;
 
-// insert single data into anime_list
+// insert single data into anime_seed
 #[allow(dead_code)]
 pub async fn add(
     pool: web::Data<Pool>,
@@ -33,11 +32,65 @@ pub async fn add(
                 .values(&new_anime_seed)
                 .execute(db_connection)
                 .expect("Error saving new anime seed");
-            let result = anime_seed.order(id.desc())
+            let result = anime_seed
+                .order(id.desc())
                 .first(db_connection)
                 .unwrap();
             Ok(result)
         }
+    }
+}
+
+pub async fn add_bulk(
+    pool: web::Data<Pool>,
+    item_vec: Vec<AnimeSeedJson>
+) -> Result<i32, diesel::result::Error> {
+    let db_connection = &mut pool.get().unwrap();
+    let mut sucess_num: i32 = 0;
+
+    for item in &item_vec {
+        if let Err(_) = anime_seed.filter(seed_url.eq(&item.seed_url)).first::<AnimeSeed>(db_connection) {
+            let new_anime_seed = PostAnimeSeed {
+                mikan_id    : &item.mikan_id,
+                subgroup_id : &item.subgroup_id,
+                episode     : &item.episode,
+                seed_name   : &item.seed_name,
+                seed_url    : &item.seed_url,
+                seed_status : &item.seed_status,
+                seed_size   : &item.seed_size
+            };
+            insert_into(anime_seed)
+                .values(&new_anime_seed)
+                .execute(db_connection)
+                .expect("save failed");
+            sucess_num += 1;
+        }
+    }
+    Ok(sucess_num)
+}
+
+pub async fn update_anime_seed_status(
+    pool: web::Data<Pool>,
+    item: String // seed_url
+) -> Result<(), diesel::result::Error> {
+    let db_connection = &mut pool.get().unwrap();
+    if let Ok(_) = anime_seed.filter(seed_url.like(&item)).first::<AnimeSeed>(db_connection) {
+        update(anime_seed)
+            .set(seed_status.eq(1))
+            .execute(db_connection)
+            .expect("save failed");
+    }
+    Ok(())
+}
+
+pub async fn get_anime_seed_by_mikan_id(
+    pool: web::Data<Pool>,
+    item: i32
+) -> Result<Vec<AnimeSeed>, diesel::result::Error> {
+    let db_connection = &mut pool.get().unwrap();
+    match anime_seed.filter(mikan_id.eq(&item)).load::<AnimeSeed>(db_connection) {
+        Ok(result) => Ok(result),
+        Err(e) => Err(e)
     }
 }
 
@@ -49,7 +102,7 @@ mod test {
     use actix_web::web;
 
     #[tokio::test]
-    async fn test_add () {
+    async fn test_add() {
         dotenv::dotenv().ok();
         let database_url = std::env::var("DATABASE_URL")
             .expect("DATABASE_URL must be set");
@@ -70,4 +123,65 @@ mod test {
 
         add(pool, test_anime_seed_json).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn test_add_bulk() {
+        dotenv::dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set");
+        let database_pool = Pool::builder()
+            .build(ConnectionManager::<SqliteConnection>::new(database_url))
+            .expect("Failed to create pool.");
+        
+        let pool = web::Data::new(database_pool);
+        let test_anime_seed_json = vec![
+            AnimeSeedJson {
+                mikan_id: 123,
+                subgroup_id: 456,
+                episode: 1,
+                seed_name: "test_seed_name_0".to_string(),
+                seed_url: "test_seed_url_0".to_string(),
+                seed_status: 0,
+                seed_size: "test_seed_size_0".to_string()
+            },
+            AnimeSeedJson {
+                mikan_id: 114514,
+                subgroup_id: 1919810,
+                episode: 1,
+                seed_name: "test_seed_name_1".to_string(),
+                seed_url: "test_seed_url_1".to_string(),
+                seed_status: 0,
+                seed_size: "test_seed_size_1".to_string()
+            }];
+
+        add_bulk(pool, test_anime_seed_json).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_update_anime_seed_status() {
+        dotenv::dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set");
+        let database_pool = Pool::builder()
+            .build(ConnectionManager::<SqliteConnection>::new(database_url))
+            .expect("Failed to create pool.");
+        
+        let pool = web::Data::new(database_pool);
+        let r = update_anime_seed_status(pool, "test_seed_url_1".to_string()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_anime_seed_by_mikan_id() {
+        dotenv::dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set");
+        let database_pool = Pool::builder()
+            .build(ConnectionManager::<SqliteConnection>::new(database_url))
+            .expect("Failed to create pool.");
+        
+        let pool = web::Data::new(database_pool);
+        let r = get_anime_seed_by_mikan_id(pool, 123).await.unwrap();
+        println!("{:?}", r);
+    }
+
 }
