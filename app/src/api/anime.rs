@@ -3,6 +3,7 @@ use anyhow::Result;
 use tera::Context;
 use chrono::{Local, Datelike};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use crate::Pool;
 use crate::dao;
 use crate::mods::spider;
@@ -56,8 +57,9 @@ pub async fn update_anime_list(
         img_url_vec.push(anime.img_url.clone());
     }
 
-    dao::anime_list::add_vec(pool.clone(), anime_list_json_vec).await.unwrap();
-    dao::anime_broadcast::add_vec(pool.clone(), anime_broadcast_json_vec).await.unwrap();
+    let db_connection = &mut pool.get().unwrap();
+    dao::anime_list::add_vec(db_connection, anime_list_json_vec).await.unwrap();
+    dao::anime_broadcast::add_vec(db_connection, anime_broadcast_json_vec).await.unwrap();
 
     // TODO 需多线程重构
     let  save_path = "static/img/anime_list".to_string();
@@ -104,10 +106,11 @@ pub async fn anime_list_by_broadcast(
     year: i32,
     season: i32
 ) -> Result<Vec<anime_list::AnimeList>, Error> {
-    let broadcast_list: Vec<anime_broadcast::AnimeBroadcast> = dao::anime_broadcast::get_by_year_season(pool.clone(), year, season).await.unwrap();
+    let db_connection = &mut pool.get().unwrap();
+    let broadcast_list: Vec<anime_broadcast::AnimeBroadcast> = dao::anime_broadcast::get_by_year_season(db_connection, year, season).await.unwrap();
     let mut anime_list: Vec<anime_list::AnimeList> = Vec::new();
     for anime in &broadcast_list {
-        anime_list.push(dao::anime_list::get_by_mikanid(pool.clone(), anime.mikan_id).await.unwrap());
+        anime_list.push(dao::anime_list::get_by_mikanid(db_connection, anime.mikan_id).await.unwrap());
     }
 
     for anime in anime_list.iter_mut() {
@@ -200,7 +203,8 @@ pub async fn subscribe_anime(
     pool: web::Data<Pool>
 ) -> Result<i32, Error> {
     let mikan_id = item.mikan_id;
-    if let Ok(_) = dao::anime_list::update_subscribestatus_by_mikanid(pool, mikan_id, 1).await {
+    let db_connection = &mut pool.get().unwrap();
+    if let Ok(_) = dao::anime_list::update_subscribestatus_by_mikanid(db_connection, mikan_id, 1).await {
         Ok(mikan_id)
     } else {
         Ok(-1)
@@ -227,7 +231,8 @@ pub async fn cancel_subscribe_anime(
     pool: web::Data<Pool>
 ) -> Result<i32, Error> {
     let mikan_id = item.mikan_id;
-    if let Ok(_) = dao::anime_list::update_subscribestatus_by_mikanid(pool, mikan_id, 0).await {
+    let db_connection = &mut pool.get().unwrap();
+    if let Ok(_) = dao::anime_list::update_subscribestatus_by_mikanid(db_connection, mikan_id, 0).await {
         Ok(mikan_id)
     } else {
         Ok(-1)
@@ -254,39 +259,55 @@ pub async fn my_anime_handler(
 pub async fn my_anime(
     pool: web::Data<Pool>
 ) -> Result<Vec<anime_list::AnimeList>, Error> {
-    let mut subscribe_anime_vec = dao::anime_list::get_by_subscribestatus(pool, 1).await.unwrap();
-    // TDOD 加上存在task的番剧
-    for anime in subscribe_anime_vec.iter_mut() {
+    let db_connection = &mut pool.get().unwrap();
+    let mut anime_vec = dao::anime_list::get_by_subscribestatus(db_connection, 1).await.unwrap();
+    let task_vec = dao::anime_task::get_all(db_connection).await.unwrap();
+    let mut task_mikan_id_set: HashSet<i32> = HashSet::new();
+    for task in task_vec {
+        if !task_mikan_id_set.contains(&task.mikan_id) {
+            task_mikan_id_set.insert(task.mikan_id);
+            if let Ok(anime) = dao::anime_list::get_by_mikanid(db_connection, task.mikan_id).await {
+                if anime.subscribe_status == 0 {
+                    task_mikan_id_set.insert(anime.mikan_id);
+                    anime_vec.push(anime);
+                }
+            } else {
+                println!("this anime is not in db, mikan_id: {}", task.mikan_id)
+            }
+        }
+    }
+
+    for anime in anime_vec.iter_mut() {
         let mut parts = anime.img_url.split('/');
         let img_name = parts.nth(4).unwrap();
         anime.img_url = format!("/static/img/anime_list/{}", img_name);
     }
-    subscribe_anime_vec.sort();
-    Ok(subscribe_anime_vec)
+    anime_vec.sort();
+    Ok(anime_vec)
 }   
 
-#[get("/get_all_anime_list")]
-pub async fn get_all_anime_list_handler(
-    pool: web::Data<Pool>
-) -> Result<HttpResponse, Error> {
-    Ok(
-        match dao::anime_list::get_all(pool)
-            .await {
-                Ok(anime_list) => HttpResponse::Created().json(anime_list),
-                _ => HttpResponse::from(HttpResponse::InternalServerError()),
-            },
-    )
-}
+// #[get("/get_all_anime_list")]
+// pub async fn get_all_anime_list_handler(
+//     pool: web::Data<Pool>
+// ) -> Result<HttpResponse, Error> {
+//     Ok(
+//         match dao::anime_list::get_all(pool)
+//             .await {
+//                 Ok(anime_list) => HttpResponse::Created().json(anime_list),
+//                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
+//             },
+//     )
+// }
 
-#[get("/get_all_anime_broadcast")]
-pub async fn get_all_anime_broadcast_handler(
-    pool: web::Data<Pool>
-) -> Result<HttpResponse, Error> {
-    Ok(
-        match dao::anime_broadcast::get_all(pool)
-            .await {
-                Ok(anime_broadcast) => HttpResponse::Created().json(anime_broadcast),
-                _ => HttpResponse::from(HttpResponse::InternalServerError()),
-            },
-    )
-}
+// #[get("/get_all_anime_broadcast")]
+// pub async fn get_all_anime_broadcast_handler(
+//     pool: web::Data<Pool>
+// ) -> Result<HttpResponse, Error> {
+//     Ok(
+//         match dao::anime_broadcast::get_all(pool)
+//             .await {
+//                 Ok(anime_broadcast) => HttpResponse::Created().json(anime_broadcast),
+//                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
+//             },
+//     )
+// }

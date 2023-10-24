@@ -1,19 +1,17 @@
-use actix_web::web;
 use anyhow::Result;
 use diesel::{RunQueryDsl, delete};
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
-use crate::Pool;
+use diesel::r2d2::{PooledConnection, ConnectionManager};
 use crate::models::anime_list::*;
 use crate::schema::anime_list::dsl::*;
 
 // insert single data into anime_list
 #[allow(dead_code)]
 pub async fn add(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: AnimeListJson
 ) -> Result<AnimeList, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     match anime_list.filter(mikan_id.eq(&item.mikan_id)).first::<AnimeList>(db_connection) {
         Ok(result) => Ok(result),
         Err(_) => {
@@ -38,13 +36,10 @@ pub async fn add(
 
 // insert Vec<data> into anime_list
 pub async fn add_vec(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item_vec: Vec<AnimeListJson>
 ) -> Result<i32, diesel::result::Error> {
-    use crate::schema::anime_list::dsl::*;
-    let db_connection = &mut pool.get().unwrap();
     let mut sucess_num: i32 = 0;
-
     for item in &item_vec {
         if let Err(_) = anime_list.filter(mikan_id.eq(&item.mikan_id)).first::<AnimeList>(db_connection) {
             let new_anime_list = PostAnimeList{
@@ -67,10 +62,9 @@ pub async fn add_vec(
 
 // get data by mikan_id
 pub async fn get_by_mikanid(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     query_mikanid: i32
 ) -> Result<AnimeList, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     let result: AnimeList = anime_list
         .filter(mikan_id.eq(query_mikanid))
         .first::<AnimeList>(db_connection)?;
@@ -78,24 +72,21 @@ pub async fn get_by_mikanid(
 }
 
 pub async fn get_by_subscribestatus(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     query_subscribestatus: i32
 ) -> Result<Vec<AnimeList>, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     let result: Vec<AnimeList> = anime_list
         .filter(subscribe_status.eq(query_subscribestatus))
         .load::<AnimeList>(db_connection)?;
     Ok(result)
 }
 
-
 // update subscribe_status by mikan_id
 pub async fn update_subscribestatus_by_mikanid(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     query_mikanid: i32,
     update_subscribestatus: i32
 ) -> Result<(), diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     diesel::update(anime_list
         .filter(mikan_id.eq(query_mikanid)))
         .set(subscribe_status.eq(update_subscribestatus))
@@ -105,9 +96,8 @@ pub async fn update_subscribestatus_by_mikanid(
 
 // query all data from anime_list
 pub async fn get_all(
-    pool: web::Data<Pool>
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<Vec<AnimeList>, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     let result: Vec<AnimeList> = anime_list.load::<AnimeList>(db_connection)?;
     Ok(result)
 }
@@ -115,10 +105,9 @@ pub async fn get_all(
 // delete single data by mikan_id
 #[allow(dead_code)]
 pub async fn del_by_mikan_id(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     i: i32, 
 ) -> Result<usize, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     let result = delete(anime_list.filter(mikan_id.eq(i))).execute(db_connection)?;
     Ok(result)
 }

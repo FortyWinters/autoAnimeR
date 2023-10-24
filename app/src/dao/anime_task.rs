@@ -3,6 +3,7 @@ use chrono::format::Item;
 use diesel::{RunQueryDsl, delete};
 use diesel::dsl::{insert_into, update};
 use diesel::prelude::*;
+use diesel::r2d2::{PooledConnection, ConnectionManager};
 use crate::Pool;
 use crate::models::anime_task::*;
 use crate::schema::anime_task::dsl::*;
@@ -127,6 +128,14 @@ pub async fn update_qb_task_status(
     Ok(())
 }
 
+// query all data from anime_task
+pub async fn get_all(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<Vec<AnimeTask>, diesel::result::Error> {
+    let result: Vec<AnimeTask> = anime_task.load::<AnimeTask>(db_connection)?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -145,7 +154,7 @@ mod test {
         
         let pool = web::Data::new(database_pool);
         let test_anime_task_json = AnimeTaskJson {
-            mikan_id: 123,
+            mikan_id: 3061,
             episode: 1,
             torrent_name: "test_torrent_name".to_string(),
             qb_task_status: 0,
