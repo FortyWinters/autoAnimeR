@@ -5,8 +5,8 @@ $(function() {
         
         var path = window.location.pathname;
         var parts = path.split('/');
-        var year = parts[2]; 
-        var season = parts[3];
+        var year = parseInt(parts[2]); 
+        var season = parseInt(parts[3]);
 
         // 更新番剧列表
         updateAnimeList(year, season)
@@ -83,7 +83,18 @@ function cancleSubscribeAnime(mikanId) {
 }
 
 function updateAnimeList(year, season) {
-    fetch("/anime/update_anime_list?year=" + year +"&season=" + season, {method: 'POST'})
+    const data = {
+        year: year,
+        season: season
+    };
+
+    fetch("/anime/update_anime_list", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
     .then(response => response.json())
     .then(data => {
         console.log(data)

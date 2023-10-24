@@ -1,16 +1,24 @@
 use actix_web::{post, get, web, HttpResponse, Error};
 use anyhow::Result;
 use tera::Context;
+use chrono::{Local, Datelike};
+use serde::{Deserialize, Serialize};
 use crate::Pool;
 use crate::dao;
 use crate::mods::spider;
 use crate::models::anime_list;
 use crate::models::anime_broadcast;
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateAnimeListJson {
+    pub year: i32,
+    pub season: i32,
+}
+
 #[post("/update_anime_list")]
 pub async fn update_anime_list_handler(
     pool: web::Data<Pool>,
-    item: web::Json<spider::UpdateAnimeListJson>
+    item: web::Json<UpdateAnimeListJson>
 ) -> Result<HttpResponse, Error> {
     Ok(
         match update_anime_list(item, pool).await {
@@ -21,7 +29,7 @@ pub async fn update_anime_list_handler(
 }
 
 pub async fn update_anime_list(
-    item: web::Json<spider::UpdateAnimeListJson>,
+    item: web::Json<UpdateAnimeListJson>,
     pool: web::Data<Pool>
 ) -> Result<usize, Error> {
     let mikan = spider::Mikan::new()?;
@@ -67,21 +75,27 @@ pub async fn anime_list_by_broadcast_handler(
     tera: web::Data<tera::Tera>,
     path: web::Path<(String, String)>
 ) -> Result<HttpResponse, Error> {
-    let anime_list = anime_list_by_broadcast(pool, path).await.unwrap();
+    let path_year = &path.0;
+    let path_season = &path.1;
+    let url_year: i32 = path_year.to_string().parse().unwrap();
+    let url_season: i32 = path_season.to_string().parse().unwrap();
+
+    let anime_list = anime_list_by_broadcast(pool, url_year, url_season).await.unwrap();
+    let broadcast_map = get_broadcast_map();
     let mut context = Context::new();
     context.insert("anime_list", &anime_list);
+    context.insert("broadcast_map", &broadcast_map);
+    context.insert("url_year", &url_year);
+    context.insert("url_season", &url_season);
     let rendered = tera.render("anime.html", &context).expect("Failed to render template");
     Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
 }
 
 pub async fn anime_list_by_broadcast(
     pool: web::Data<Pool>,
-    path: web::Path<(String, String)>
+    year: i32,
+    season: i32
 ) -> Result<Vec<anime_list::AnimeList>, Error> {
-    let path_year = &path.0;
-    let path_season = &path.1;
-    let year: i32 = path_year.to_string().parse().unwrap();
-    let season: i32 = path_season.to_string().parse().unwrap();
     let broadcast_list: Vec<anime_broadcast::AnimeBroadcast> = dao::anime_broadcast::get_by_year_season(pool.clone(), year, season).await.unwrap();
     let mut anime_list: Vec<anime_list::AnimeList> = Vec::new();
     for anime in &broadcast_list {
@@ -93,10 +107,64 @@ pub async fn anime_list_by_broadcast(
         let img_name = parts.nth(4).unwrap();
         anime.img_url = format!("/static/img/anime_list/{}", img_name);
     }
-    // TODO 番剧排序
+    anime_list.sort();
     Ok(anime_list)
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BroadcastMap {
+    pub year: i32,
+    pub spring: i32,
+    pub summer:i32,
+    pub autumn: i32,
+    pub winter: i32,
+}
+
+pub fn get_broadcast_map() -> Vec<BroadcastMap> {
+    let now = Local::now();
+    let current_year = now.year();
+    let current_month = now.month();
+    let mut broadcast_map: Vec<BroadcastMap> = Vec::new();
+    broadcast_map.push(BroadcastMap {
+        year   : 2013, 
+        spring : 0, 
+        summer : 0, 
+        autumn : 1, 
+        winter : 0
+    });
+
+    let bm = BroadcastMap {
+        year   : 1999, 
+        spring : 1, 
+        summer : 1, 
+        autumn : 1, 
+        winter : 1
+    };
+    for year in 2014..current_year {
+        let mut b = bm.clone();
+        b.year = year;
+        broadcast_map.push(b);
+    }
+
+    let mut b = bm.clone();
+    if current_month > 0 && current_month < 3 {
+        b.year = current_year;
+        b.spring = 0;
+        b.summer = 0;
+        b.autumn = 0;
+    } else if current_month >= 3 && current_month < 6 {
+        b.year = current_year;
+        b.summer = 0;
+        b.autumn = 0;
+    } else if current_month >= 6 && current_month < 9 {
+        b.year = current_year;
+        b.autumn = 0;
+    } else {
+        b.year = current_year;
+    }
+    broadcast_map.push(b);
+    return broadcast_map
+}
 
 #[get("/")]
 pub async fn index(

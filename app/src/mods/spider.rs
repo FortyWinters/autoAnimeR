@@ -48,12 +48,6 @@ pub struct Broadcast {
     pub season: i32
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UpdateAnimeListJson {
-    pub year: i32,
-    pub season: i32,
-}
-
 #[allow(dead_code)]
 impl Mikan {
     pub fn new() -> Result<Mikan, Box<dyn Error>> {
