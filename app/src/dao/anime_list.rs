@@ -68,7 +68,7 @@ pub async fn add_vec(
 // get data by mikan_id
 pub async fn get_by_mikanid(
     pool: web::Data<Pool>,
-    query_mikanid: i32,
+    query_mikanid: i32
 ) -> Result<AnimeList, diesel::result::Error> {
     let db_connection = &mut pool.get().unwrap();
     let result: AnimeList = anime_list
@@ -77,14 +77,27 @@ pub async fn get_by_mikanid(
     Ok(result)
 }
 
+pub async fn get_by_subscribestatus(
+    pool: web::Data<Pool>,
+    query_subscribestatus: i32
+) -> Result<Vec<AnimeList>, diesel::result::Error> {
+    let db_connection = &mut pool.get().unwrap();
+    let result: Vec<AnimeList> = anime_list
+        .filter(subscribe_status.eq(query_subscribestatus))
+        .load::<AnimeList>(db_connection)?;
+    Ok(result)
+}
+
+
 // update subscribe_status by mikan_id
-pub async fn update_subscribe_status_by_mikanid(
+pub async fn update_subscribestatus_by_mikanid(
     pool: web::Data<Pool>,
     query_mikanid: i32,
     update_subscribestatus: i32
 ) -> Result<(), diesel::result::Error> {
     let db_connection = &mut pool.get().unwrap();
-    diesel::update(anime_list.filter(mikan_id.eq(query_mikanid)))
+    diesel::update(anime_list
+        .filter(mikan_id.eq(query_mikanid)))
         .set(subscribe_status.eq(update_subscribestatus))
         .execute(db_connection)?;
     Ok(())

@@ -28,6 +28,7 @@ pub async fn update_anime_list_handler(
     )
 }
 
+// update anime list by year & season
 pub async fn update_anime_list(
     item: web::Json<UpdateAnimeListJson>,
     pool: web::Data<Pool>
@@ -69,6 +70,12 @@ pub async fn update_anime_list(
     Ok(anime_list.len())
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BroadcastUrl {
+    pub url_year: i32,
+    pub url_season: i32
+}
+
 #[get("/{url_year}/{url_season}")]
 pub async fn anime_list_by_broadcast_handler(
     pool: web::Data<Pool>,
@@ -79,18 +86,19 @@ pub async fn anime_list_by_broadcast_handler(
     let path_season = &path.1;
     let url_year: i32 = path_year.to_string().parse().unwrap();
     let url_season: i32 = path_season.to_string().parse().unwrap();
-
+    let broadcast_url = BroadcastUrl { url_year, url_season };
     let anime_list = anime_list_by_broadcast(pool, url_year, url_season).await.unwrap();
     let broadcast_map = get_broadcast_map().await;
     let mut context = Context::new();
     context.insert("anime_list", &anime_list);
     context.insert("broadcast_map", &broadcast_map);
-    context.insert("url_year", &url_year);
-    context.insert("url_season", &url_season);
+    context.insert("broadcast_url", &broadcast_url);
+    context.insert("page_flag", &1);
     let rendered = tera.render("anime.html", &context).expect("Failed to render template");
     Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
 }
 
+// show anime list by year & season
 pub async fn anime_list_by_broadcast(
     pool: web::Data<Pool>,
     year: i32,
@@ -120,6 +128,7 @@ pub struct BroadcastMap {
     pub winter: i32,
 }
 
+// get year & season broadcast map
 pub async fn get_broadcast_map() -> Vec<BroadcastMap> {
     let now = Local::now();
     let current_year = now.year();
@@ -185,12 +194,13 @@ pub async fn subscribe_anime_handler(
     )
 }
 
+// subscribe anime by mikan id
 pub async fn subscribe_anime(    
     item: web::Json<SubscribeAnimeJson>,
     pool: web::Data<Pool>
 ) -> Result<i32, Error> {
     let mikan_id = item.mikan_id;
-    if let Ok(_) = dao::anime_list::update_subscribe_status_by_mikanid(pool, mikan_id, 1).await {
+    if let Ok(_) = dao::anime_list::update_subscribestatus_by_mikanid(pool, mikan_id, 1).await {
         Ok(mikan_id)
     } else {
         Ok(-1)
@@ -211,29 +221,49 @@ pub async fn cancel_subscribe_anime_handler(
     )
 }
 
+// cancel subscribe anime by mikan id
 pub async fn cancel_subscribe_anime(    
     item: web::Json<SubscribeAnimeJson>,
     pool: web::Data<Pool>
 ) -> Result<i32, Error> {
     let mikan_id = item.mikan_id;
-    if let Ok(_) = dao::anime_list::update_subscribe_status_by_mikanid(pool, mikan_id, 0).await {
+    if let Ok(_) = dao::anime_list::update_subscribestatus_by_mikanid(pool, mikan_id, 0).await {
         Ok(mikan_id)
     } else {
         Ok(-1)
     }
 }
 
-#[get("/")]
-pub async fn index(
+#[get("")]
+pub async fn my_anime_handler(
     tera: web::Data<tera::Tera>,
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
-    let anime_list = dao::anime_list::get_all(pool).await.unwrap();
+    let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };
+    let anime_list = my_anime(pool).await.unwrap();
+    let broadcast_map = get_broadcast_map().await;
     let mut context = Context::new();
     context.insert("anime_list", &anime_list);
-    let rendered = tera.render("index.html", &context).expect("Failed to render template");
+    context.insert("broadcast_map", &broadcast_map);
+    context.insert("broadcast_url", &broadcast_url);
+    context.insert("page_flag", &0);
+    let rendered = tera.render("anime.html", &context).expect("Failed to render template");
     Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
 }
+
+pub async fn my_anime(
+    pool: web::Data<Pool>
+) -> Result<Vec<anime_list::AnimeList>, Error> {
+    let mut subscribe_anime_vec = dao::anime_list::get_by_subscribestatus(pool, 1).await.unwrap();
+    // TDOD 加上存在task的番剧
+    for anime in subscribe_anime_vec.iter_mut() {
+        let mut parts = anime.img_url.split('/');
+        let img_name = parts.nth(4).unwrap();
+        anime.img_url = format!("/static/img/anime_list/{}", img_name);
+    }
+    subscribe_anime_vec.sort();
+    Ok(subscribe_anime_vec)
+}   
 
 #[get("/get_all_anime_list")]
 pub async fn get_all_anime_list_handler(

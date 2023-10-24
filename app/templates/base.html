@@ -24,19 +24,19 @@
             <div class="navi">
                 {% for bm in broadcast_map %}
                 <div class="broadcast">
-                    {% if bm.year == url_year %}
+                    {% if bm.year == broadcast_url.url_year %}
                     <div class="year" style="background-color: orange;">{{ bm.year }}</div>
-                        {% if url_season == 1 %}
+                        {% if broadcast_url.url_season == 1 %}
                             {% if bm.winter == 1 %}<div class="season"><a href="/anime/{{ bm.year }}/4">冬</a></div>{% endif %}
                             {% if bm.spring == 1 %}<div class="season" style="background-color: orange;"><a href="/anime/{{ bm.year }}/1">春</a></div>{% endif %}
                             {% if bm.summer == 1 %}<div class="season"><a href="/anime/{{ bm.year }}/2">夏</a></div>{% endif %}
                             {% if bm.autumn == 1 %}<div class="season"><a href="/anime/{{ bm.year }}/3">秋</a></div>{% endif %}
-                        {% elif url_season == 2 %}
+                        {% elif broadcast_url.url_season == 2 %}
                             {% if bm.winter == 1 %}<div class="season"><a href="/anime/{{ bm.year }}/4">冬</a></div>{% endif %}
                             {% if bm.spring == 1 %}<div class="season"><a href="/anime/{{ bm.year }}/1">春</a></div>{% endif %}
                             {% if bm.summer == 1 %}<div class="season" style="background-color: orange;"><a href="/anime/{{ bm.year }}/2">夏</a></div>{% endif %}
                             {% if bm.autumn == 1 %}<div class="season"><a href="/anime/{{ bm.year }}/3">秋</a></div>{% endif %}
-                        {% elif url_season == 3 %}
+                        {% elif broadcast_url.url_season == 3 %}
                             {% if bm.winter == 1 %}<div class="season"><a href="/anime/{{ bm.year }}/4">冬</a></div>{% endif %}
                             {% if bm.spring == 1 %}<div class="season"><a href="/anime/{{ bm.year }}/1">春</a></div>{% endif %}
                             {% if bm.summer == 1 %}<div class="season"><a href="/anime/{{ bm.year }}/2">夏</a></div>{% endif %}
@@ -57,7 +57,9 @@
                 </div>
             {% endfor %}
             </div>
+            {% if page_flag == 1 %}
             <button class="anime-button">列表更新</button>
+            {% endif %}
         </div>
         {% block body %}{% endblock %}
     </div>
