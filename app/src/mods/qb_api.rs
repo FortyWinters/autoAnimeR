@@ -1,11 +1,9 @@
 use reqwest::{ multipart::{ Part, Form }, Error };
 use serde_json;
 use chrono::DateTime;
-use std::{
-    collections::HashMap,
-    time::{ Duration, UNIX_EPOCH }
-};
+use std::time::{ Duration, UNIX_EPOCH };
 use serde::{ Deserialize, Serialize };
+use crate::models::anime_task::AnimeTaskJson;
 
 #[derive(Debug)]
 pub struct QbitTaskExecutor {
@@ -81,14 +79,13 @@ impl QbitTaskExecutor {
         Ok(torrent_info)
     }
 
-    pub async fn qb_api_add_torrent<>(&self, anime_name: &String, episode_info: &EpisodeInfo) -> Result<(), Error> {
+    pub async fn qb_api_add_torrent<>(
+        &self, 
+        anime_name: &String, 
+        anime_task_info: &AnimeTaskJson) -> Result<(), Error> {
         let add_endpoint = "http://127.0.0.1:8081/api/v2/torrents/add";
-        let file_name = episode_info.seed_url
-            .rsplit('/')
-            .next()
-            .unwrap()
-            .to_string();
-        let seed_path = format!("downloads/seed/{}/{}", episode_info.mikan_id, file_name);
+        let file_name = anime_task_info.torrent_name.clone();
+        let seed_path = format!("downloads/seed/{}/{}", anime_task_info.mikan_id, file_name);
         let file_byte = std::fs::read(seed_path).unwrap();
         let form = Form::new()
             .part("torrent", Part::bytes(file_byte).file_name(file_name))
@@ -131,14 +128,18 @@ impl QbitTaskExecutor {
         Ok(())
     }
 
-    pub async fn qb_api_torrent_rename_file(&self, anime_name: &String, episode_info: &EpisodeInfo) -> Result<(), Error> {
+    pub async fn qb_api_torrent_rename_file(
+        &self, 
+        anime_name: &String, 
+        subgroup_name: &String, 
+        anime_task_info: &AnimeTaskJson
+    ) -> Result<(), Error> {
         let rename_file_endpoint = "http://127.0.0.1:8081/api/v2/torrents/renameFile";
-        let hashes = episode_info.seed_url
-            .rsplit('/')
+        let hashes = anime_task_info.torrent_name
+            .split('.')
             .next()
-            .unwrap_or("")
-            .trim_end_matches(".torrent")
-            .to_string();
+            .unwrap()
+            .to_owned();
         let torrent_name = hashes.clone() + ".torrent";
         let file_name = self.qb_api_torrent_info(torrent_name)
             .await
@@ -158,9 +159,9 @@ impl QbitTaskExecutor {
                 ("newPath", format!("{}{}{}{}{}{}{}",
                         anime_name, 
                         " - ", 
-                        episode_info.episode, 
+                        anime_task_info.episode, 
                         " - ",
-                        episode_info.subgroup_name, 
+                        subgroup_name, 
                         ".",
                         extension)
                 )])
@@ -336,59 +337,10 @@ impl TorrentInfo {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct MikanTorrentsInfos {
-    pub info: HashMap<i32, AnimeInfo> //<mikan_id, anime_info>
-  }
-  
-#[derive(Clone)]
-pub struct AnimeInfo {
-    pub info: HashMap<i32, EpisodeInfo> //<episode, episode_info>
-}
-
-#[derive(Clone)]
-pub struct EpisodeInfo {
-    pub mikan_id: i32,
-    pub episode: i32,
-    pub subgroup_name: String,
-    pub seed_name: String,
-    pub seed_url: String,
-}
-
-#[derive(Clone)]
-pub struct AnimeSeedInfo {
-    pub mikan_id: i32,
-    pub subgroup_name: String,
-    pub episode: i32,
-    pub seed_name: String,
-    pub seed_url: String,
-    pub seed_status: i32,
-    pub seed_size: String
-}
-
-#[allow(dead_code)]
-impl MikanTorrentsInfos {
-    pub async fn new(anime_seed: AnimeSeedInfo, ) -> Self {
-        
-        let episode_info = EpisodeInfo {
-            mikan_id:anime_seed.mikan_id,
-            episode: anime_seed.episode,
-            subgroup_name: anime_seed.subgroup_name,
-            seed_name: anime_seed.seed_name,
-            seed_url: anime_seed.seed_url,
-        };
-        
-        let mut anime_info = AnimeInfo { info: HashMap::new() };
-        anime_info.info.insert(anime_seed.episode, episode_info);
-        
-        let mut mikan_torrents_infos = MikanTorrentsInfos { info: HashMap::new() };
-        mikan_torrents_infos.info.insert(anime_seed.mikan_id, anime_info);
-        mikan_torrents_infos
-    }
-}
-
 #[cfg(test)]
 mod test {
+    use crate::models::anime_task::AnimeTaskJson;
+
     use super::*;
 
     #[tokio::test]
@@ -425,13 +377,13 @@ mod test {
         
 
         let anime_name = "test".to_string();
-        let episode_info =  EpisodeInfo { 
-                mikan_id: 3144, 
-                episode: 1, 
-                subgroup_name: "tttttt12345".to_string(), 
-                seed_name: "[Airota][Kanojo mo Kanojo][09][WebRip AVC-8bit 1080p AAC][CHS].mp4".to_string(), 
-                seed_url: "/Download/20231014/0a1d3e3ab95cf6625c266010fd13e96949ab23e7.torrent".to_string() };
+        let anime_task_info = AnimeTaskJson { 
+                mikan_id: 3143, 
+                episode: 3, 
+                torrent_name: "55829bc76527a4868f9fd5c40e769f618f30e85b.torrent".to_string(),
+                qb_task_status: 0
+            };
         
-        qb_task_executor.qb_api_add_torrent(&anime_name, &episode_info).await.unwrap();
+        qb_task_executor.qb_api_add_torrent(&anime_name, &anime_task_info).await.unwrap();
     }
 }

@@ -95,6 +95,7 @@ pub async fn update_subscribestatus_by_mikanid(
 } 
 
 // query all data from anime_list
+#[allow(dead_code)]
 pub async fn get_all(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<Vec<AnimeList>, diesel::result::Error> {
@@ -110,4 +111,37 @@ pub async fn del_by_mikan_id(
 ) -> Result<usize, diesel::result::Error> {
     let result = delete(anime_list.filter(mikan_id.eq(i))).execute(db_connection)?;
     Ok(result)
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use diesel::r2d2::ConnectionManager;
+    use crate::Pool;
+    use actix_web::web;
+
+    #[tokio::test]
+    async fn test_add() {
+        dotenv::dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set");
+        let database_pool = Pool::builder()
+            .build(ConnectionManager::<SqliteConnection>::new(database_url))
+            .expect("Failed to create pool.");
+        
+        let pool = web::Data::new(database_pool);
+        let db_connection = &mut pool.get().unwrap();
+        let test_anime_seed_json = AnimeListJson {
+            mikan_id: 3143,
+            anime_name: "米奇与达利".to_string(),
+            update_day: 1,
+            img_url: "/images/Bangumi/202310/69e733eb.jpg".to_string(),
+            anime_type: 0,
+            subscribe_status: 1
+        };
+
+        let r = add(db_connection, test_anime_seed_json).await.unwrap();
+        println!("{:?}", r);
+    }
 }

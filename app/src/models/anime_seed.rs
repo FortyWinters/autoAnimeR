@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use crate::schema::*;
 
-#[derive(Debug, Serialize, Deserialize, Queryable)]
+#[derive(Debug, Serialize, Deserialize, Queryable, Clone)]
 pub struct AnimeSeed {
     pub id: Option<i32>,
     pub mikan_id: i32,
