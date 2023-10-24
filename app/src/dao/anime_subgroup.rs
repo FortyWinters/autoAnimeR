@@ -52,6 +52,7 @@ pub async fn add_vec(
     Ok(sucess_num)
 }
 
+#[allow(dead_code)]
 // get data by subgroup_id
 pub async fn get_by_subgroupid(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,

@@ -65,12 +65,14 @@ impl DoAnimeTask {
         let mut download_success_vec: Vec<AnimeSeed> = Vec::new();
         let mut download_failed_vec: Vec<AnimeSeed> = Vec::new();
 
-        for new_anime_seed in new_anime_seed_vec {
-            match mikan.download_seed(&new_anime_seed.seed_url, &format!("{}{}", "downloads/seed/", new_anime_seed.mikan_id))
-                    .await
-            {
-                Ok(_) => download_success_vec.push(new_anime_seed),
-                Err(_) => download_failed_vec.push(new_anime_seed)
+        if new_anime_seed_vec.len() > 0 {
+            for new_anime_seed in new_anime_seed_vec {
+                match mikan.download_seed(&new_anime_seed.seed_url, &format!("{}{}", "downloads/seed/", new_anime_seed.mikan_id))
+                        .await
+                {
+                    Ok(()) => download_success_vec.push(new_anime_seed),
+                    Err(_) => download_failed_vec.push(new_anime_seed)
+                }
             }
         }
 
@@ -79,7 +81,7 @@ impl DoAnimeTask {
         // 更新 anime_seed
         let mut anime_task_info_vec: Vec<AnimeTaskJson> = Vec::new();
         for anime_seed in download_success_vec {
-            dao::anime_seed::update_anime_seed_status(&mut self.db_connection, anime_seed.seed_name).await.unwrap();
+            dao::anime_seed::update_anime_seed_status(&mut self.db_connection, &anime_seed.seed_url).await.unwrap();
             
             anime_task_info_vec.push(
                 AnimeTaskJson { 

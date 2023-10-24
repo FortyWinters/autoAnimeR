@@ -70,6 +70,7 @@ pub async fn get_by_year_season(
     Ok(result)
 }
 
+#[allow(dead_code)]
 // query all data from anime_broadcast
 pub async fn get_all(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,

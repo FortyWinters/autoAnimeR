@@ -1,20 +1,17 @@
-use actix_web::web;
-use chrono::format::Item;
+use std::collections::HashSet;
 use diesel::{RunQueryDsl, delete};
 use diesel::dsl::{insert_into, update};
 use diesel::prelude::*;
 use diesel::r2d2::{PooledConnection, ConnectionManager};
-use crate::Pool;
 use crate::models::anime_task::*;
 use crate::schema::anime_task::dsl::*;
 
 // insert single data into anime_task
 #[allow(dead_code)]
 pub async fn add(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: AnimeTaskJson
 ) -> Result<AnimeTask, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     match anime_task
         .filter(torrent_name.eq(&item.torrent_name))
         .first::<AnimeTask>(db_connection) {
@@ -41,13 +38,12 @@ pub async fn add(
 
 #[allow(dead_code)]
 pub async fn add_bulk(
-    pool: web::Data<Pool>,
-    item_vec: Vec<AnimeTaskJson>
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    item_vec: &Vec<AnimeTaskJson>
 ) -> Result<i32, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     let mut success_num: i32 = 0;
 
-    for item in &item_vec {
+    for item in item_vec {
         if let Err(_) = anime_task.filter(torrent_name.eq(&item.torrent_name)).first::<AnimeTask>(db_connection) {
                 let new_anime_task = PostAnimeTask {
                     mikan_id        : &item.mikan_id,
@@ -78,22 +74,21 @@ pub async fn get_exist_anime_task_by_mikan_id(
 
 #[allow(dead_code)]
 pub async fn get_exist_anime_task_by_torrent_name(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: String // mikan_id
 ) -> Result<Vec<AnimeTask>, diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     match anime_task.filter(torrent_name.eq(&item)).load::<AnimeTask>(db_connection) {
         Ok(result) => Ok(result),
         Err(e) => Err(e)
     }
 }
 
+
 #[allow(dead_code)]
 pub async fn delete_anime_task_by_mikan_id(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: i32 // mikan_id
 ) -> Result<(), diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     let _r = delete(anime_task.filter(mikan_id.eq(&item)))
         .execute(db_connection)
         .expect("Error deleting anime_task");
@@ -102,10 +97,9 @@ pub async fn delete_anime_task_by_mikan_id(
 
 #[allow(dead_code)]
 pub async fn delete_anime_task_by_torrent_name(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: String // torrent_name
 ) -> Result<(), diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     let _r = delete(anime_task.filter(torrent_name.like(&item)))
         .execute(db_connection)
         .expect("Error deleting anime_task");
@@ -114,10 +108,9 @@ pub async fn delete_anime_task_by_torrent_name(
 
 #[allow(dead_code)]
 pub async fn update_qb_task_status(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: String // torrent_name
 ) -> Result<(), diesel::result::Error> {
-    let db_connection = &mut pool.get().unwrap();
     if let Ok(_) = anime_task.filter(torrent_name.eq(&item)).first::<AnimeTask>(db_connection) {
         update(anime_task.filter(torrent_name.eq(&item)))
             .set(qb_task_status.eq(1))
@@ -127,12 +120,24 @@ pub async fn update_qb_task_status(
     Ok(())
 }
 
+
 // query all data from anime_task
 pub async fn get_all(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<Vec<AnimeTask>, diesel::result::Error> {
     let result: Vec<AnimeTask> = anime_task.load::<AnimeTask>(db_connection)?;
     Ok(result)
+}
+
+pub async fn get_exist_anime_task_set(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<HashSet<(i32, i32)>, diesel::result::Error> {
+    let result: Vec<AnimeTask> = anime_task.load::<AnimeTask>(db_connection).unwrap();
+    let mut exist_anime_task_set:HashSet<(i32, i32)> = HashSet::new();
+    for item in result {
+        exist_anime_task_set.insert((item.mikan_id, item.episode));
+    }
+    Ok(exist_anime_task_set)
 }
 
 #[cfg(test)]
@@ -152,6 +157,8 @@ mod test {
             .expect("Failed to create pool.");
         
         let pool = web::Data::new(database_pool);
+        let db_connection = &mut pool.get().unwrap();
+
         let test_anime_task_json = AnimeTaskJson {
             mikan_id: 3061,
             episode: 1,
@@ -159,7 +166,7 @@ mod test {
             qb_task_status: 0,
         };
 
-        add(pool, test_anime_task_json).await.unwrap();
+        add(db_connection, test_anime_task_json).await.unwrap();
     }
 
     #[tokio::test]
@@ -172,6 +179,7 @@ mod test {
             .expect("Failed to create pool.");
         
         let pool = web::Data::new(database_pool);
+        let db_connection = &mut pool.get().unwrap();
         let test_anime_task_json = vec![
             AnimeTaskJson {
                 mikan_id: 123,
@@ -186,7 +194,7 @@ mod test {
                 qb_task_status: 0,
             },
         ];
-        add_bulk(pool, test_anime_task_json).await.unwrap();
+        add_bulk(db_connection, &test_anime_task_json).await.unwrap();
     }
 
 
@@ -216,7 +224,9 @@ mod test {
             .expect("Failed to create pool.");
         
         let pool = web::Data::new(database_pool);
-        let r = update_qb_task_status(pool, "test_torrent_name".to_string()).await.unwrap();
+        let db_connection = &mut pool.get().unwrap();
+
+        let r = update_qb_task_status(db_connection, "test_torrent_name".to_string()).await.unwrap();
         // let r = get_exist_anime_task_by_torrent_name(pool, "test_torrent_name".to_string()).await.unwrap();
         println!("{:?}", r);
     }
@@ -231,8 +241,9 @@ mod test {
             .expect("Failed to create pool.");
         
         let pool = web::Data::new(database_pool);
+        let db_connection = &mut pool.get().unwrap();
         // let _r = delete_anime_task_by_torrent_name(pool, "test_torrent_name".to_string()).await.unwrap();
-        let _r = delete_anime_task_by_mikan_id(pool, 123).await.unwrap();
+        let _r = delete_anime_task_by_mikan_id(db_connection, 123).await.unwrap();
     }
 }
 
