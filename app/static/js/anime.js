@@ -13,7 +13,7 @@ $(function() {
     });
 
     $('button.subscribe-button').on('click', function() {
-        var mikanId = $(this).attr('id');
+        var mikanId = parseInt($(this).attr('id'));
         var subscribeStatus = $(this).attr('subscribe_status');
         this.disabled = true;
         this.style.backgroundColor = "#d6d6d6";
@@ -57,7 +57,17 @@ $(function() {
 })
 
 function subscribeAnime(mikanId) {
-    fetch("/anime/subscribe_anime?mikan_id="+mikanId, {method: 'POST'})
+    const data = {
+        mikan_id: mikanId
+    };
+
+    fetch("/anime/subscribe_anime", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
         .then(response => response.json())
         .then(data => {
             console.log(data)
@@ -70,7 +80,17 @@ function subscribeAnime(mikanId) {
 }
 
 function cancleSubscribeAnime(mikanId) {
-    fetch("/anime/cancel_subscribe_anime?mikan_id="+mikanId, {method: 'POST'})
+    const data = {
+        mikan_id: mikanId
+    };
+
+    fetch("/anime/cancel_subscribe_anime?", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
     .then(response => response.json())
     .then(data => {
         console.log(data)

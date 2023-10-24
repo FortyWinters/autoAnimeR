@@ -81,7 +81,7 @@ pub async fn anime_list_by_broadcast_handler(
     let url_season: i32 = path_season.to_string().parse().unwrap();
 
     let anime_list = anime_list_by_broadcast(pool, url_year, url_season).await.unwrap();
-    let broadcast_map = get_broadcast_map();
+    let broadcast_map = get_broadcast_map().await;
     let mut context = Context::new();
     context.insert("anime_list", &anime_list);
     context.insert("broadcast_map", &broadcast_map);
@@ -120,7 +120,7 @@ pub struct BroadcastMap {
     pub winter: i32,
 }
 
-pub fn get_broadcast_map() -> Vec<BroadcastMap> {
+pub async fn get_broadcast_map() -> Vec<BroadcastMap> {
     let now = Local::now();
     let current_year = now.year();
     let current_month = now.month();
@@ -164,6 +164,63 @@ pub fn get_broadcast_map() -> Vec<BroadcastMap> {
     }
     broadcast_map.push(b);
     return broadcast_map
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubscribeAnimeJson {
+    pub mikan_id: i32
+}
+
+#[post("/subscribe_anime")]
+pub async fn subscribe_anime_handler(
+    item: web::Json<SubscribeAnimeJson>,
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
+    Ok(
+        match subscribe_anime(item, pool)
+            .await {
+                Ok(mikan_id) => HttpResponse::Created().json(mikan_id),
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+pub async fn subscribe_anime(    
+    item: web::Json<SubscribeAnimeJson>,
+    pool: web::Data<Pool>
+) -> Result<i32, Error> {
+    let mikan_id = item.mikan_id;
+    if let Ok(_) = dao::anime_list::update_subscribe_status_by_mikanid(pool, mikan_id, 1).await {
+        Ok(mikan_id)
+    } else {
+        Ok(-1)
+    }
+}
+
+#[post("/cancel_subscribe_anime")]
+pub async fn cancel_subscribe_anime_handler(
+    item: web::Json<SubscribeAnimeJson>,
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
+    Ok(
+        match cancel_subscribe_anime(item, pool)
+            .await {
+                Ok(mikan_id) => HttpResponse::Created().json(mikan_id),
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+pub async fn cancel_subscribe_anime(    
+    item: web::Json<SubscribeAnimeJson>,
+    pool: web::Data<Pool>
+) -> Result<i32, Error> {
+    let mikan_id = item.mikan_id;
+    if let Ok(_) = dao::anime_list::update_subscribe_status_by_mikanid(pool, mikan_id, 0).await {
+        Ok(mikan_id)
+    } else {
+        Ok(-1)
+    }
 }
 
 #[get("/")]

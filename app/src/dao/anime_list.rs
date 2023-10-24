@@ -65,6 +65,7 @@ pub async fn add_vec(
     Ok(sucess_num)
 }
 
+// get data by mikan_id
 pub async fn get_by_mikanid(
     pool: web::Data<Pool>,
     query_mikanid: i32,
@@ -75,6 +76,19 @@ pub async fn get_by_mikanid(
         .first::<AnimeList>(db_connection)?;
     Ok(result)
 }
+
+// update subscribe_status by mikan_id
+pub async fn update_subscribe_status_by_mikanid(
+    pool: web::Data<Pool>,
+    query_mikanid: i32,
+    update_subscribestatus: i32
+) -> Result<(), diesel::result::Error> {
+    let db_connection = &mut pool.get().unwrap();
+    diesel::update(anime_list.filter(mikan_id.eq(query_mikanid)))
+        .set(subscribe_status.eq(update_subscribestatus))
+        .execute(db_connection)?;
+    Ok(())
+} 
 
 // query all data from anime_list
 pub async fn get_all(
