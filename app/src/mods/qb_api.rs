@@ -82,7 +82,8 @@ impl QbitTaskExecutor {
     pub async fn qb_api_add_torrent<>(
         &self, 
         anime_name: &String, 
-        anime_seed_info: &AnimeSeed) -> Result<(), Error> {
+        anime_seed_info: &AnimeSeed)
+     -> Result<(), Error> {
         let add_endpoint = "http://127.0.0.1:8081/api/v2/torrents/add";
         let file_name = anime_seed_info.seed_url
             .rsplit('/')

@@ -179,6 +179,14 @@ pub async fn get_by_mikanid_and_episode(
     }
 }
 
+#[allow(dead_code)]
+pub async fn delete_all(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>
+) -> Result<(), diesel::result::Error>{
+    let _r = delete(anime_seed).execute(db_connection).expect("Error deleting anime_task");
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
