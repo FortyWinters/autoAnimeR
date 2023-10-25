@@ -5,8 +5,8 @@ $(function() {
         
         var path = window.location.pathname;
         var parts = path.split('/');
-        var year = parseInt(parts[2]); 
-        var season = parseInt(parts[3]);
+        var year = parseInt(parts[3]); 
+        var season = parseInt(parts[4]);
 
         // 更新番剧列表
         updateAnimeList(year, season)

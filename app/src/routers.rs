@@ -11,6 +11,6 @@ pub fn anime_routes(cfg: &mut web::ServiceConfig) {
             .service(cancel_subscribe_anime_handler)
             .service(update_anime_seed_handler)
             .service(my_anime_index_handler)
-            // .service(anime_detail_handler)
+            .service(anime_detail_handler)
     );
 }

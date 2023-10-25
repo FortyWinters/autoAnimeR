@@ -83,7 +83,7 @@ pub struct BroadcastUrl {
     pub url_season: i32
 }
 
-#[get("/{url_year}/{url_season}")]
+#[get("list/{url_year}/{url_season}")]
 pub async fn anime_list_by_broadcast_handler(
     pool: web::Data<Pool>,
     tera: web::Data<tera::Tera>,
