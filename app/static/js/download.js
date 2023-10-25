@@ -1,8 +1,8 @@
 function getTorrentInfo() {
-    fetch('/download/get_qb_download_progress', {method: 'GET'})
+    fetch('/download/qb_download_progress', {method: 'GET'})
         .then(response => response.json())
         .then(data => {
-            const infoList = data.data;
+            const infoList = data;
             const infoDiv = document.getElementById('torrentInfo');
             var htmlString = `
                 <tr>
@@ -20,7 +20,7 @@ function getTorrentInfo() {
                 </tr>`;
             if (infoList.length > 0) {
                 infoList.forEach(function(info) {
-                    const done = Math.round(parseFloat(info.Done.trim()));
+                    const done = Math.round(parseFloat(info.qb_info.done.trim()));
                     htmlString += `
                         <tr>
                             <td class="column-name" title='${info.anime_ame}'>
@@ -30,13 +30,13 @@ function getTorrentInfo() {
                             <td class="column-progress">
                                 <progress value=${done} max="100"></progress>
                             </td>
-                            <td class="column-done">${info.done}</td>
-                            <td class="column-speed">${info.download_speed}</td>
-                            <td class="column-eta">${info.eta}</td>
-                            <td class="column-peers">${info.peers}</td>
-                            <td class="column-seeds">${info.seeds}</td>
-                            <td class="column-size">${info.size}</td>
-                            <td class="column-state">\${info.state\}</td>
+                            <td class="column-done">${info.qb_info.done}</td>
+                            <td class="column-speed">${info.qb_info.download_speed}</td>
+                            <td class="column-eta">${info.qb_info.eta}</td>
+                            <td class="column-peers">${info.qb_info.peers}</td>
+                            <td class="column-seeds">${info.qb_info.seeds}</td>
+                            <td class="column-size">${info.qb_info.size}</td>
+                            <td class="column-state">${info.qb_info.state}</td>
                             <td class="column-button">
                                 <button class="task-button" id="resume" onclick="handleTaskResume('${info.torrent_name}')">恢复</button>
                                 <button class="task-button" id="pause" onclick="handleTaskPause('${info.torrent_name}')">暂停</button>
