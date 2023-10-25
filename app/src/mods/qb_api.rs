@@ -257,22 +257,15 @@ impl QbitTaskExecutor {
 }
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct TorrentInfo {
-    #[serde(rename = "name")]
     pub name: String,
-    #[serde(rename = "size")]
     pub size: String,
-    #[serde(rename = "done")]
     pub done: String, // progress
-    #[serde(rename = "peers")]
     pub peers: String, // num_leechs
-    #[serde(rename = "seeds")]
     pub seeds: String, // num_seeds
-    #[serde(rename = "download_speed")]
     pub download_speed: String, // dlspeed
-    #[serde(rename = "eta")]
     pub eta: String,
-    #[serde(rename = "hash")]
     pub hash: String,
+    pub state: String
 }
 
 impl TorrentInfo {
@@ -342,6 +335,11 @@ impl TorrentInfo {
                     .as_str()
                     .ok_or("Field not found")
                     .unwrap()
+                    .to_owned(),
+                state: item["state"]
+                    .as_str()
+                    .ok_or("Field not found")
+                    .unwrap()
                     .to_owned()
                 })
     }
@@ -364,7 +362,7 @@ mod test {
 
     #[tokio::test]
     async fn test_qb_api_torrent_info() {
-        let torrent_name = "0a1d3e3ab95cf6625c266010fd13e96949ab23e7.torrent".to_string();
+        let torrent_name = "bdd2f547cdfd8a38011a5ea451d65379c9572305.torrent".to_string();
 
         let qb_task_executor = QbitTaskExecutor::new_with_login(
             "admin".to_string(), 
@@ -372,7 +370,8 @@ mod test {
             .await
             .unwrap();
 
-        qb_task_executor.qb_api_torrent_info(torrent_name).await.unwrap();
+        let r = qb_task_executor.qb_api_torrent_info(torrent_name).await.unwrap();
+        println!("{}", r.state);
     }
 
     #[tokio::test]
@@ -390,7 +389,7 @@ mod test {
                 subgroup_id: 382,
                 episode: 3,
                 seed_name: "【喵萌奶茶屋】★10月新番★[米基与达利 / Migi to Dali][03][1080p][简日双语][招募翻译]".to_string(),
-                seed_url: "/Download/20231021/55829bc76527a4868f9fd5c40e769f618f30e85b.torrent".to_string(),
+                seed_url: "/Download/20231021/bdd2f547cdfd8a38011a5ea451d65379c9572305.torrent".to_string(),
                 seed_status: 0,
                 seed_size: "349.4MB".to_string()
             };
