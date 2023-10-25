@@ -4,6 +4,8 @@ use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
 use tera::Tera;
 use actix_files::Files;
+use mods::qb_api::QbitTaskExecutor;
+// use api::do_anime_task::DoAnimeTask;
 
 mod routers;
 mod schema;
@@ -28,10 +30,20 @@ async fn main() -> std::io::Result<()> {
 
     let tera = Tera::new("templates/**/*").expect("Failed to load templates");
 
+    let qb = QbitTaskExecutor::new_with_login(
+        "admin".to_string(),
+        "adminadmin".to_string())
+        .await
+        .unwrap();
+    
+    // let mut do_anime_task = DoAnimeTask::new(web::Data::new(database_pool), qb).await.unwrap();
+
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(database_pool.clone()))
             .app_data(web::Data::new(tera.clone()))
+            .app_data(qb.clone())
+            // .app_data(do_anime_task.clone())
             .service(Files::new("/static", "./static").show_files_listing())
             .configure(anime_routes)
             .configure(setting_routes)

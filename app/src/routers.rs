@@ -1,9 +1,7 @@
 use actix_web::web;
-use crate::api::anime::*;
-use crate::api::setting::*;
-use crate::api::download::*;
 
 pub fn anime_routes(cfg: &mut web::ServiceConfig) {
+    use crate::api::anime::*;
     cfg.service(
         web::scope("/anime")
             .service(anime_index_handler)
@@ -15,10 +13,12 @@ pub fn anime_routes(cfg: &mut web::ServiceConfig) {
             .service(anime_detail_handler)
             .service(recover_seed_handler)
             .service(delete_anime_data_handler)
+            // .service(create_task_by_seed_url_handler)
     );
 }
 
 pub fn setting_routes(cfg: &mut web::ServiceConfig) {
+    use crate::api::setting::*;
     cfg.service(
         web::scope("/setting")
             .service(setting_index_handler)
@@ -26,6 +26,7 @@ pub fn setting_routes(cfg: &mut web::ServiceConfig) {
 }
 
 pub fn download_routes(cfg: &mut web::ServiceConfig) {
+    use crate::api::download::*;
     cfg.service(
         web::scope("/download")
             .service(download_index_handler)

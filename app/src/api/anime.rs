@@ -9,6 +9,7 @@ use diesel::SqliteConnection;
 use crate::Pool;
 use crate::dao;
 use crate::mods::spider;
+// use crate::mods::qb_api::QbitTaskExecutor;
 use crate::models::anime_list;
 use crate::models::anime_broadcast;
 use crate::models::anime_seed;
@@ -22,11 +23,12 @@ pub struct UpdateAnimeListJson {
 
 #[post("/update_anime_list")]
 pub async fn update_anime_list_handler(
-    pool: web::Data<Pool>,
-    item: web::Json<UpdateAnimeListJson>
+    item: web::Json<UpdateAnimeListJson>,
+    pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
     Ok(
-        match update_anime_list(item, pool).await {
+        match update_anime_list(item, db_connection).await {
             Ok(anime_list) => HttpResponse::Created().json(anime_list),
             _ => HttpResponse::from(HttpResponse::InternalServerError()),
         },
@@ -36,7 +38,7 @@ pub async fn update_anime_list_handler(
 // update anime list by year & season
 pub async fn update_anime_list(
     item: web::Json<UpdateAnimeListJson>,
-    pool: web::Data<Pool>
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<usize, Error> {
     let mikan = spider::Mikan::new()?;
     let anime_list = mikan.get_anime(item.year, item.season).await?;
@@ -61,7 +63,6 @@ pub async fn update_anime_list(
         img_url_vec.push(anime.img_url.clone());
     }
 
-    let db_connection = &mut pool.get().unwrap();
     dao::anime_list::add_vec(db_connection, anime_list_json_vec).await.unwrap();
     dao::anime_broadcast::add_vec(db_connection, anime_broadcast_json_vec).await.unwrap();
 
@@ -88,8 +89,9 @@ pub async fn anime_list_by_broadcast_handler(
     tera: web::Data<tera::Tera>,
     path: web::Path<(String, String)>
 ) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
     Ok(
-        match anime_list_by_broadcast(pool, tera, path)
+        match anime_list_by_broadcast(db_connection, tera, path)
             .await {
                 Ok(res) => res,
                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
@@ -98,7 +100,7 @@ pub async fn anime_list_by_broadcast_handler(
 }
 
 pub async fn anime_list_by_broadcast(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     tera: web::Data<tera::Tera>,
     path: web::Path<(String, String)>
 ) -> Result<HttpResponse, Error> {
@@ -107,7 +109,7 @@ pub async fn anime_list_by_broadcast(
     let url_year: i32 = path_year.to_string().parse().unwrap();
     let url_season: i32 = path_season.to_string().parse().unwrap();
     let broadcast_url = BroadcastUrl { url_year, url_season };
-    let anime_list = get_anime_list_by_broadcast(pool, url_year, url_season).await.unwrap();
+    let anime_list = get_anime_list_by_broadcast(url_year, url_season, db_connection).await.unwrap();
     let broadcast_map = get_broadcast_map().await;
     let mut context = Context::new();
     context.insert("anime_list", &anime_list);
@@ -121,11 +123,10 @@ pub async fn anime_list_by_broadcast(
 
 // show anime list by year & season
 pub async fn get_anime_list_by_broadcast(
-    pool: web::Data<Pool>,
     year: i32,
-    season: i32
+    season: i32,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>
 ) -> Result<Vec<anime_list::AnimeList>, Error> {
-    let db_connection = &mut pool.get().unwrap();
     let broadcast_list: Vec<anime_broadcast::AnimeBroadcast> = dao::anime_broadcast::get_by_year_season(db_connection, year, season).await.unwrap();
     let mut anime_list: Vec<anime_list::AnimeList> = Vec::new();
     for anime in &broadcast_list {
@@ -207,8 +208,9 @@ pub async fn subscribe_anime_handler(
     item: web::Json<AnimeRequestJson>,
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
     Ok(
-        match subscribe_anime(item, pool)
+        match subscribe_anime(item, db_connection)
             .await {
                 Ok(mikan_id) => HttpResponse::Created().json(mikan_id),
                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
@@ -219,10 +221,9 @@ pub async fn subscribe_anime_handler(
 // subscribe anime by mikan id
 pub async fn subscribe_anime(    
     item: web::Json<AnimeRequestJson>,
-    pool: web::Data<Pool>
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<i32, Error> {
     let mikan_id = item.mikan_id;
-    let db_connection = &mut pool.get().unwrap();
     if let Ok(_) = dao::anime_list::update_subscribestatus_by_mikanid(db_connection, mikan_id, 1).await {
         Ok(mikan_id)
     } else {
@@ -235,8 +236,9 @@ pub async fn cancel_subscribe_anime_handler(
     item: web::Json<AnimeRequestJson>,
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
     Ok(
-        match cancel_subscribe_anime(item, pool)
+        match cancel_subscribe_anime(item, db_connection)
             .await {
                 Ok(mikan_id) => HttpResponse::Created().json(mikan_id),
                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
@@ -247,10 +249,9 @@ pub async fn cancel_subscribe_anime_handler(
 // cancel subscribe anime by mikan id
 pub async fn cancel_subscribe_anime(    
     item: web::Json<AnimeRequestJson>,
-    pool: web::Data<Pool>
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<i32, Error> {
     let mikan_id = item.mikan_id;
-    let db_connection = &mut pool.get().unwrap();
     if let Ok(_) = dao::anime_list::update_subscribestatus_by_mikanid(db_connection, mikan_id, 0).await {
         Ok(mikan_id)
     } else {
@@ -260,11 +261,12 @@ pub async fn cancel_subscribe_anime(
 
 #[get("/")]
 pub async fn anime_index_handler(
-    tera: web::Data<tera::Tera>,
-    pool: web::Data<Pool>
+    pool: web::Data<Pool>,
+    tera: web::Data<tera::Tera>
 ) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
     Ok(
-        match anime_index(tera, pool)
+        match anime_index(db_connection, tera)
             .await {
                 Ok(res) => res,
                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
@@ -273,11 +275,11 @@ pub async fn anime_index_handler(
 }
 
 pub async fn anime_index(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     tera: web::Data<tera::Tera>,
-    pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
     let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };
-    let anime_list = my_anime(pool).await.unwrap();
+    let anime_list = my_anime(db_connection).await.unwrap();
     let broadcast_map = get_broadcast_map().await;
     let mut context = Context::new();
     context.insert("anime_list", &anime_list);
@@ -289,9 +291,8 @@ pub async fn anime_index(
 }
 
 pub async fn my_anime(
-    pool: web::Data<Pool>
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<Vec<anime_list::AnimeList>, Error> {
-    let db_connection = &mut pool.get().unwrap();
     let mut anime_vec = dao::anime_list::get_by_subscribestatus(db_connection, 1).await.unwrap();
     let task_vec = dao::anime_task::get_all(db_connection).await.unwrap();
     let mut task_mikan_id_set: HashSet<i32> = HashSet::new();
@@ -383,7 +384,9 @@ fn convert_spider_seed_to_anime_seed(spider_vec: Vec<spider::Seed>) -> Vec<anime
     }).collect()
 }
 
-fn convert_spider_subgroup_to_anime_subgroup(spider_vec: Vec<spider::Subgroup>) -> Vec<anime_subgroup::AnimeSubgroupJson> {
+fn convert_spider_subgroup_to_anime_subgroup(
+    spider_vec: Vec<spider::Subgroup>
+) -> Vec<anime_subgroup::AnimeSubgroupJson> {
     spider_vec.into_iter().map(|s| anime_subgroup::AnimeSubgroupJson {     
         subgroup_name : s.subgroup_name,
         subgroup_id   : s.subgroup_id,
@@ -396,8 +399,9 @@ pub async fn anime_detail_handler(
     tera: web::Data<tera::Tera>,
     path: web::Path<String>
 ) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
     Ok(
-        match anime_detail(pool, tera, path)
+        match anime_detail(db_connection, tera, path)
             .await {
                 Ok(res) => res,
                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
@@ -406,11 +410,10 @@ pub async fn anime_detail_handler(
 }
 
 pub async fn anime_detail(
-    pool: web::Data<Pool>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     tera: web::Data<tera::Tera>,
     path: web::Path<String>
 ) -> Result<HttpResponse, Error> {
-    let db_connection = &mut pool.get().unwrap();
     let path_mikan_id = &path;
     let path_mikan_id: i32 = path_mikan_id.to_string().parse().unwrap();
     let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };
@@ -595,3 +598,29 @@ pub async fn delete_anime_data(
     // TODO qb删除
     Ok(())
 }
+
+// #[post("/create_task_by_seed_url")]
+// pub async fn create_task_by_seed_url_handler(
+//     item: web::Json<AnimeRequestJson>,
+//     pool: web::Data<Pool>,
+//     qb: web::Data<QbitTaskExecutor>
+// ) -> Result<HttpResponse, Error> {
+//     let db_connection = &mut pool.get().unwrap();
+//     Ok(
+//         match create_task_by_seed_url_handler(item, db_connection, qb)
+//             .await {
+//                 Ok(data) => HttpResponse::Created().json(data),
+//                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
+//             },
+//     )
+// }
+
+// pub async fn create_task_by_seed_url(
+//     item: web::Json<AnimeRequestJson>,
+//     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+//     qb: web::Data<QbitTaskExecutor>
+// ) -> Result<i32, Error> {
+    
+
+//     Ok(1);
+// }

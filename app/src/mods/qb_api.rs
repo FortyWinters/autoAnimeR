@@ -5,7 +5,7 @@ use std::time::{ Duration, UNIX_EPOCH };
 use serde::{ Deserialize, Serialize };
 use crate::models::anime_seed::AnimeSeed;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct QbitTaskExecutor {
     pub qbt_client: reqwest::Client,
     pub cookie: String,
