@@ -334,10 +334,12 @@ pub async fn get_anime_seed(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<usize, Error> {
     let mikan = spider::Mikan::new()?;
+    let anime_info = dao::anime_list::get_by_mikanid(db_connection, mikan_id).await.unwrap();
+    let anime_type = anime_info.anime_type;
     let mut seed_vec: Vec<anime_seed::AnimeSeedJson> = Vec::new();
     let subgroup_list = mikan.get_subgroup(mikan_id).await.expect("get subgroup failed");
     for subgroup in &subgroup_list {
-        if let Ok(seed_list) = get_seed_by_subgroup(mikan.clone(), mikan_id, subgroup.subgroup_id).await {
+        if let Ok(seed_list) = get_seed_by_subgroup(mikan.clone(), mikan_id, subgroup.subgroup_id, anime_type).await {
             seed_vec.extend(seed_list);
         }
     }
@@ -351,9 +353,10 @@ pub async fn get_anime_seed(
 pub async fn get_seed_by_subgroup(
     mikan: spider::Mikan,
     mikan_id: i32,
-    subgroup_id: i32
+    subgroup_id: i32,
+    anime_type: i32
 ) -> Result<Vec<anime_seed::AnimeSeedJson>, Error> {
-    let seed_list: Vec<spider::Seed> = mikan.get_seed(mikan_id, subgroup_id).await.unwrap();
+    let seed_list: Vec<spider::Seed> = mikan.get_seed(mikan_id, subgroup_id, anime_type).await.unwrap();
     Ok(convert_spider_seed_to_anime_seed(seed_list))
 }
 
@@ -508,3 +511,4 @@ pub async fn get_anime_seed_group_by_subgroup(
     
     Ok((anime, subgroup_with_seed_list))
 }
+

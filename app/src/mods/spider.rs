@@ -146,32 +146,45 @@ impl Mikan {
         return Ok(subgroup_list)
     }
 
-    pub async fn get_seed(&self, mikan_id: i32, subgroup_id: i32) -> Result<Vec<Seed>, Box<dyn Error>> {
+    pub async fn get_seed(&self, mikan_id: i32, subgroup_id: i32, anime_type: i32) -> Result<Vec<Seed>, Box<dyn Error>> {
         let url = format!("{}/Home/ExpandEpisodeTable?bangumiId={}&subtitleGroupId={}&take=65", self.url, mikan_id, subgroup_id);
         let document = self.request_html(&url).await?;
         let mut seed_list: Vec<Seed> = Vec::new();
-        for node in document.find(Name("tr")) {
+        for (i, node) in document.find(Name("tr")).enumerate() {
+            if i == 0 {
+                continue;
+            }
+            
             let seed_url = node.find(Name("a")).nth(2).and_then(|n| n.attr("href")).map(|href| href.to_string()).unwrap_or_else(|| String::new()); 
             let seed_info = node.text();
             let parts: Vec<&str> = seed_info.trim().split('\n').collect();
             let seed_name = parts.get(0).unwrap().to_string();
             let seed_size = parts.get(1).unwrap().replace(" ", "");
 
-            if !regex_seed_1080(&seed_name) {
-                continue;
+            if anime_type == 0 {
+                if !regex_seed_1080(&seed_name) {
+                    continue;
+                }
             }
 
-            if let Ok(episode) = regex_seed_episode(&seed_name) {
-                seed_list.push(Seed {
+            let mut seed_episode = 1;
+            if anime_type == 0 {
+                if let Ok(episode) = regex_seed_episode(&seed_name) {
+                    seed_episode = episode;
+                } else {
+                    continue;
+                }
+            }
+
+            seed_list.push(Seed {
                     mikan_id,
-                    episode,
+                    episode: seed_episode,
                     seed_url,
                     subgroup_id,
                     seed_name: seed_name[..seed_name.len()-15].to_string(),
                     seed_status: 0,
                     seed_size
-                })
-            }
+            });
         }
         return Ok(seed_list)
     }
@@ -262,7 +275,7 @@ fn regex_seed_1080(seed_name: &str) -> bool {
 //         }
 //     }
 
-//     let subgroup_list = mikan.get_seed(3060, 615);
+//     let subgroup_list = mikan.get_seed(3060, 615, 0);
 //     match subgroup_list {
 //         Ok(res) => {
 //             for a in res {
