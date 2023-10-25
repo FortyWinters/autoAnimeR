@@ -139,6 +139,20 @@ pub async fn get_by_mikanid_subgeoupid(
     }
 }
 
+pub async fn get_by_mikanid_and_episode(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_mikanid: i32,
+    query_episode: i32
+) -> Result<Vec<AnimeSeed>, diesel::result::Error>{
+    match anime_seed
+    .filter(mikan_id.eq(&query_mikanid))
+    .filter(episode.eq(&query_episode))
+    .load::<AnimeSeed>(db_connection) {
+    Ok(result) => Ok(result),
+    Err(e) => Err(e)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -248,6 +262,6 @@ mod test {
         let pool = web::Data::new(database_pool);
         let db_connection = &mut pool.get().unwrap();
         //let _r = delete_anime_seed_by_seed_url(pool, "test_seed_url".to_string()).await.unwrap();
-        let _r = delete_anime_seed_by_mikan_id(db_connection, 123).await.unwrap();
+        let _r = delete_anime_seed_by_mikan_id(db_connection, 3143).await.unwrap();
     }
 }

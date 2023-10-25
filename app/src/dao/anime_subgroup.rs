@@ -56,7 +56,7 @@ pub async fn add_vec(
 // get data by subgroup_id
 pub async fn get_by_subgroupid(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    query_subgroupid: i32
+    query_subgroupid: & i32
 ) -> Result<AnimeSubgroup, diesel::result::Error> {
     let result: AnimeSubgroup = anime_subgroup
         .filter(subgroup_id.eq(query_subgroupid))

@@ -107,6 +107,20 @@ pub async fn delete_anime_task_by_torrent_name(
 }
 
 #[allow(dead_code)]
+pub async fn delete_anime_task_by_mikan_id_and_episode(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_mikan_id: i32,
+    query_episode: i32
+) -> Result<(), diesel::result::Error> {
+    let _r = delete(anime_task
+        .filter(mikan_id.eq(&query_mikan_id)))
+        .filter(episode.eq(&query_episode))
+        .execute(db_connection)
+        .expect("Error deleting anime_task");
+    Ok(())
+}
+
+#[allow(dead_code)]
 pub async fn update_qb_task_status(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: String // torrent_name
@@ -133,6 +147,21 @@ pub async fn get_exist_anime_task_set(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<HashSet<(i32, i32)>, diesel::result::Error> {
     let result: Vec<AnimeTask> = anime_task.load::<AnimeTask>(db_connection).unwrap();
+    let mut exist_anime_task_set:HashSet<(i32, i32)> = HashSet::new();
+    for item in result {
+        exist_anime_task_set.insert((item.mikan_id, item.episode));
+    }
+    Ok(exist_anime_task_set)
+}
+
+#[allow(dead_code)]
+pub async fn get_exist_anime_task_set_by_mikanid(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_mikan_id: i32
+) -> Result<HashSet<(i32, i32)>, diesel::result::Error> {
+    let result: Vec<AnimeTask> = anime_task
+        .filter(mikan_id.eq(query_mikan_id))
+        .load::<AnimeTask>(db_connection).unwrap();
     let mut exist_anime_task_set:HashSet<(i32, i32)> = HashSet::new();
     for item in result {
         exist_anime_task_set.insert((item.mikan_id, item.episode));
@@ -243,7 +272,7 @@ mod test {
         let pool = web::Data::new(database_pool);
         let db_connection = &mut pool.get().unwrap();
         // let _r = delete_anime_task_by_torrent_name(pool, "test_torrent_name".to_string()).await.unwrap();
-        let _r = delete_anime_task_by_mikan_id(db_connection, 123).await.unwrap();
+        let _r = delete_anime_task_by_mikan_id_and_episode(db_connection, 3143, 3).await.unwrap();
     }
 }
 

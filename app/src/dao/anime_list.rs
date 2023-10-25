@@ -113,7 +113,6 @@ pub async fn del_by_mikan_id(
     Ok(result)
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;

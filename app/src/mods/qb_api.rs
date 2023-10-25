@@ -3,7 +3,7 @@ use serde_json;
 use chrono::DateTime;
 use std::time::{ Duration, UNIX_EPOCH };
 use serde::{ Deserialize, Serialize };
-use crate::models::anime_task::AnimeTaskJson;
+use crate::models::anime_seed::AnimeSeed;
 
 #[derive(Debug)]
 pub struct QbitTaskExecutor {
@@ -82,10 +82,15 @@ impl QbitTaskExecutor {
     pub async fn qb_api_add_torrent<>(
         &self, 
         anime_name: &String, 
-        anime_task_info: &AnimeTaskJson) -> Result<(), Error> {
+        anime_seed_info: &AnimeSeed) -> Result<(), Error> {
         let add_endpoint = "http://127.0.0.1:8081/api/v2/torrents/add";
-        let file_name = anime_task_info.torrent_name.clone();
-        let seed_path = format!("downloads/seed/{}/{}", anime_task_info.mikan_id, file_name);
+        let file_name = anime_seed_info.seed_url
+            .rsplit('/')
+            .next()
+            .unwrap_or(&anime_seed_info.seed_url)
+            .to_string();
+        
+        let seed_path = format!("downloads/seed/{}/{}", anime_seed_info.mikan_id, file_name);
         let file_byte = std::fs::read(seed_path).unwrap();
         let form = Form::new()
             .part("torrent", Part::bytes(file_byte).file_name(file_name))
@@ -132,22 +137,26 @@ impl QbitTaskExecutor {
         &self, 
         anime_name: &String, 
         subgroup_name: &String, 
-        anime_task_info: &AnimeTaskJson
+        anime_seed_info: &AnimeSeed
     ) -> Result<(), Error> {
         let rename_file_endpoint = "http://127.0.0.1:8081/api/v2/torrents/renameFile";
-        let hashes = anime_task_info.torrent_name
+        let torrent_name = anime_seed_info.seed_url
+            .rsplit('/')
+            .next()
+            .unwrap_or(&anime_seed_info.seed_url)
+            .to_string();
+        let hashes = torrent_name
             .split('.')
             .next()
             .unwrap()
             .to_owned();
-        let torrent_name = hashes.clone() + ".torrent";
         let file_name = self.qb_api_torrent_info(torrent_name)
             .await
             .unwrap()
             .name;
         let extension = match file_name.rsplit('.').next() { 
             Some(ext) => ext,
-            None => ".mp4",
+            None => "mp4",
         };
 
         let torrent_info_response = self.qbt_client
@@ -159,7 +168,7 @@ impl QbitTaskExecutor {
                 ("newPath", format!("{}{}{}{}{}{}{}",
                         anime_name, 
                         " - ", 
-                        anime_task_info.episode, 
+                        anime_seed_info.episode, 
                         " - ",
                         subgroup_name, 
                         ".",
@@ -339,8 +348,6 @@ impl TorrentInfo {
 
 #[cfg(test)]
 mod test {
-    use crate::models::anime_task::AnimeTaskJson;
-
     use super::*;
 
     #[tokio::test]
@@ -375,15 +382,18 @@ mod test {
             .await
             .unwrap();
         
-
         let anime_name = "test".to_string();
-        let anime_task_info = AnimeTaskJson { 
-                mikan_id: 3143, 
-                episode: 3, 
-                torrent_name: "55829bc76527a4868f9fd5c40e769f618f30e85b.torrent".to_string(),
-                qb_task_status: 0
+        let anime_seed_info = AnimeSeed { 
+                id: Some(100),
+                mikan_id: 3143,
+                subgroup_id: 382,
+                episode: 3,
+                seed_name: "【喵萌奶茶屋】★10月新番★[米基与达利 / Migi to Dali][03][1080p][简日双语][招募翻译]".to_string(),
+                seed_url: "/Download/20231021/55829bc76527a4868f9fd5c40e769f618f30e85b.torrent".to_string(),
+                seed_status: 0,
+                seed_size: "349.4MB".to_string()
             };
         
-        qb_task_executor.qb_api_add_torrent(&anime_name, &anime_task_info).await.unwrap();
+        qb_task_executor.qb_api_add_torrent(&anime_name, &anime_seed_info).await.unwrap();
     }
 }
