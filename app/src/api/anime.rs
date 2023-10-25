@@ -120,7 +120,6 @@ pub async fn anime_list_by_broadcast(
     Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
 }
 
-
 // show anime list by year & season
 pub async fn get_anime_list_by_broadcast(
     year: i32,
@@ -414,6 +413,8 @@ pub async fn anime_detail(
     tera: web::Data<tera::Tera>,
     path: web::Path<String>
 ) -> Result<HttpResponse, Error> {
+    // TODO qb与anime_task同步
+    
     let path_mikan_id = &path;
     let path_mikan_id: i32 = path_mikan_id.to_string().parse().unwrap();
     let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };

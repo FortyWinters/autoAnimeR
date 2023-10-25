@@ -177,6 +177,16 @@ pub async fn get_exist_anime_task_set_by_mikanid(
     Ok(exist_anime_task_set)
 }
 
+pub async fn get_by_qbtaskstatus(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_qbtaskstatus: i32
+) -> Result<Vec<AnimeTask>, diesel::result::Error> {
+    let result: Vec<AnimeTask> = anime_task
+        .filter(qb_task_status.eq(query_qbtaskstatus))
+        .load::<AnimeTask>(db_connection)?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
