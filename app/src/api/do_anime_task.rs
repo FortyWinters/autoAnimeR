@@ -9,6 +9,12 @@ use crate::mods::qb_api::QbitTaskExecutor;
 use diesel::r2d2::PooledConnection;
 use diesel::r2d2::ConnectionManager;
 use diesel::SqliteConnection;
+use futures::future::join_all;
+
+pub enum DownloadSeedStatus {
+    SUCCESS(AnimeSeed),
+    FAILED(AnimeSeed)
+}
 
 #[allow(dead_code)]
 pub async fn create_anime_task_bulk(
@@ -87,17 +93,37 @@ pub async fn filter_and_download (
     let mut download_success_vec: Vec<AnimeSeed> = Vec::new();
     let mut download_failed_vec: Vec<AnimeSeed> = Vec::new();
 
+    //  if new_anime_seed_vec.len() > 0 {
+    //      for new_anime_seed in new_anime_seed_vec {
+    //         println!("processing {}", new_anime_seed.seed_name);
+    //         match mikan.download_seed(&new_anime_seed.seed_url, &format!("{}{}", "downloads/seed/", new_anime_seed.mikan_id)).await
+    //         {
+    //             Ok(()) => download_success_vec.push(new_anime_seed),
+    //             Err(_) => download_failed_vec.push(new_anime_seed)
+    //         }
+    //      }
+    // }
+    
      if new_anime_seed_vec.len() > 0 {
-         for new_anime_seed in new_anime_seed_vec {
-            println!("processing {}", new_anime_seed.seed_name);
-            match mikan.download_seed(&new_anime_seed.seed_url, &format!("{}{}", "downloads/seed/", new_anime_seed.mikan_id)).await
-            {
-                Ok(()) => download_success_vec.push(new_anime_seed),
-                Err(_) => download_failed_vec.push(new_anime_seed)
+        let task_res_vec = join_all(new_anime_seed_vec
+            .into_iter()
+            .map(|anime_seed|{
+                download_seed_handler(anime_seed, mikan.clone())
+            })).await;
+    
+        for task_res in task_res_vec {
+            match task_res {
+                Ok(status) => {
+                    match status {
+                        DownloadSeedStatus::SUCCESS(anime_seed) => download_success_vec.push(anime_seed),
+                        DownloadSeedStatus::FAILED(anime_seed) => download_failed_vec.push(anime_seed)
+                    }
+                }
+                Err(_) => continue
             }
-         }
+        }
     }
-     
+
     println!("download_failed_vec: {:?}", download_failed_vec);
 
     // 更新 anime_seed table
@@ -153,6 +179,17 @@ pub async fn create_qb_task(
     qb_task_executor.qb_api_add_torrent(&anime_name, &anime_seed).await.unwrap();
     qb_task_executor.qb_api_torrent_rename_file(&anime_name, &subgroup_name, &anime_seed).await.unwrap();
     Ok(())
+}
+
+pub async fn download_seed_handler(
+    anime_seed: AnimeSeed,
+    mikan: Mikan
+) -> Result<DownloadSeedStatus, Error> {
+    println!("processing {}", anime_seed.seed_name);
+    match mikan.download_seed(&anime_seed.seed_url, &format!("{}{}", "downloads/seed/", anime_seed.mikan_id)).await {
+        Ok(_) => Ok(DownloadSeedStatus::SUCCESS(anime_seed)),
+        Err(_) => Ok(DownloadSeedStatus::FAILED(anime_seed))
+    }
 }
 
 #[allow(dead_code)]
