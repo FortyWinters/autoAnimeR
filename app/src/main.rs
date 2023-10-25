@@ -34,6 +34,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(tera.clone()))
             .service(Files::new("/static", "./static").show_files_listing())
             .configure(anime_routes)
+            .configure(setting_routes)
+            .configure(download_routes)
     })
     .bind(("0.0.0.0", 8080))?
     .run()

@@ -244,24 +244,7 @@ pub async fn cancel_subscribe_anime(
 }
 
 #[get("/")]
-pub async fn my_anime_index_handler(
-    tera: web::Data<tera::Tera>,
-    pool: web::Data<Pool>
-) -> Result<HttpResponse, Error> {
-    let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };
-    let anime_list = my_anime(pool).await.unwrap();
-    let broadcast_map = get_broadcast_map().await;
-    let mut context = Context::new();
-    context.insert("anime_list", &anime_list);
-    context.insert("broadcast_map", &broadcast_map);
-    context.insert("broadcast_url", &broadcast_url);
-    context.insert("page_flag", &0);
-    let rendered = tera.render("anime.html", &context).expect("Failed to render template");
-    Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
-}
-
-#[get("")]
-pub async fn my_anime_handler(
+pub async fn anime_index_handler(
     tera: web::Data<tera::Tera>,
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
