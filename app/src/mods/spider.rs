@@ -222,7 +222,7 @@ fn regex_seed_episode(seed_name: &str) -> Result<i32, Box<dyn Error>> {
         if str_list3.is_empty() {
             return Err("regex episode failed".into());
         } else {
-            return Ok(str_list3[0][2..str_list3[0].len()-2].parse::<i32>().unwrap());
+            return Ok(str_list3[0][4..str_list3[0].len()-4].parse::<i32>().unwrap());
         }
     }
     return Ok(str_list2[0][1..str_list2[0].len()-1].to_string().parse::<i32>().unwrap())

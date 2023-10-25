@@ -6,6 +6,18 @@
     <title>Document</title>
 </head>
 <body>
-    {{ subgroup_with_seed_list }}
+    {% for key, value in test_map %}
+    <div>{{ key }}</div>
+    <div>{{  value }}</div>
+        {% for v in value %}
+        <div>{{v}}</div>
+        {% endfor %}
+    {% endfor %}
+
+    {% for s in subgroup_with_seed_list %}
+    <div>{{ s.subgroup_name }}</div>
+    {% endfor %}
+
+
 </body>
 </html>

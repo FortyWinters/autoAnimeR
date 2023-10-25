@@ -11,7 +11,7 @@ pub struct AnimeTask {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "anime_task"]
+#[diesel(table_name = anime_task)]
 pub struct PostAnimeTask<'a> {
     pub mikan_id: &'a i32,
     pub episode: &'a i32,

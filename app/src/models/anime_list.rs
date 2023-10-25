@@ -29,7 +29,7 @@ impl PartialOrd for AnimeList {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "anime_list"]
+#[diesel(table_name = anime_list)]
 pub struct PostAnimeList<'a> {
     pub mikan_id: &'a i32,
     pub anime_name: &'a str,

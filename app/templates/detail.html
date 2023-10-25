@@ -48,37 +48,52 @@
             </div>
             <div class="episode-container">
                 <div class="subgroup-container">
-                    {% for subgroup in subgroup_with_seed_list %}
-                        <div class="subgroup" title="{{ subgroup.subgroup_name }}" onclick="showSeeds('{{ subgroup.subgroup_id }}')">{{ subgroup.subgroup_name }}。</div>
+                    {% for ss in subgroup_with_seed_list %}
+                        {% if ss.subgroup_id == 0 %}
+                            <div class="subgroup" title="{{ ss.subgroup_name }}" id="{{ ss.subgroup_id }}" onclick="showSeeds('{{ ss.subgroup_id }}')" style="background-color: rgb(87, 136, 87);color: white;">{{ ss.subgroup_name }}</div>
+                        {% else %}
+                            <div class="subgroup" title="{{ ss.subgroup_name }}" id="{{ ss.subgroup_id }}" onclick="showSeeds('{{ ss.subgroup_id }}')">{{ ss.subgroup_name }}、</div>
+                        {% endif %}
                     {% endfor %}
-                    {% for subgroup in subgroup_with_seed_list %}
-                        {% if subgroup.subgroup_id == 0 %}
-                            <div class="subgroup-seed" id="auto" style="display: block;">
-                                {% for seed in subgroup.seed_list %}
-                                    {% if seed.status == 3 %}
-                                        <div class="episode" id="downloaded-ep" data-id="{{ anime.mikan_id }}" style="background-color:rgb(41, 207, 132);">{{ seed.seed.episode }}</div>
-                                    {% elif seed.status == 2 %}
+                    {% for ss in subgroup_with_seed_list %}
+                        {% if ss.subgroup_id == 0 %}
+                            <div class="subgroup-seed" id="{{ ss.subgroup_id }}" style="display: block;">
+                                {% for st in ss.seed_list %}
+                                    {% if st.seed.episode == -1 %}
+                                        {% set episode_str = "合" %}
+                                    {% else %}
+                                        {% set episode_str = st.seed.episode %}
+                                    {% endif %}
+
+                                    {% if st.status == 3 %}
+                                        <div class="episode" id="downloaded-ep" data-id="{{ anime.mikan_id }}" style="background-color:rgb(41, 207, 132);">{{ episode_str }}</div>
+                                    {% elif st.status == 2 %}
                                         <a href="/download">
-                                            <div class="episode" id="downloaded-ep" data-id="{{ anime.mikan_id }}" style="background-color:rgb(88, 202, 255);">{{ seed.seed.episode }}</div>
+                                            <div class="episode" id="downloaded-ep" data-id="{{ anime.mikan_id }}" style="background-color:rgb(88, 202, 255);">{{ episode_str }}</div>
                                         </a>
                                     {% else %}
-                                        <div class="episode" id="undownloaded-ep" data-id="{{ anime.mikan_id }}">{{ seed.seed.episode }}</div>
+                                        <div class="episode" id="undownloaded-ep" data-id="{{ anime.mikan_id }}">{{ episode_str }}</div>
                                     {% endif %}
                                 {% endfor %}
                             </div>
                         {% else %}
-                            <div class="subgroup-seed" id="{{ subgroup.subgroup_id }}">
-                                {% for seed in subgroup %}
-                                    {% if seed.seed_status == 0 %}
-                                        <div class="episode" id="undownloaded-sd" data-id="{{ anime.mikan_id }}" data-url="{{ seed.seed.seed_url }}" title="{{ seed.seed.seed_name }}">{{ seed.seed.episode }}</div>
-                                    {% elif seed.seed_status == 3 %}
-                                        <div class="episode" id="downloaded-sd" data-id="{{ anime.mikan_id }}" title="{{ seed.seed.seed_name }}" style="background-color:rgb(41, 207, 132);">{{ seed.seed.episode }}</div>
-                                    {% elif seed.seed_status == 2 %}
+                            <div class="subgroup-seed" id="{{ ss.subgroup_id }}">
+                                {% for st in ss.seed_list %}
+                                    {% if st.seed.episode == -1 %}
+                                        {% set episode_str = "合" %}
+                                    {% else %}
+                                        {% set episode_str = st.seed.episode %}
+                                    {% endif %}
+                                    {% if st.status == 0 %}
+                                        <div class="episode" id="undownloaded-sd" data-id="{{ anime.mikan_id }}" data-url="{{ st.seed.seed_url }}" title="{{ st.seed.seed_name }}">{{ episode_str }}</div>
+                                    {% elif st.status == 3 %}
+                                        <div class="episode" id="downloaded-sd" data-id="{{ anime.mikan_id }}" title="{{ st.seed.seed_name }}" style="background-color:rgb(41, 207, 132);">{{ episode_str }}</div>
+                                    {% elif st.status == 2 %}
                                         <a href="/download">
-                                            <div class="episode" id="downloaded-sd" data-id="{{ anime.mikan_id }}" title="{{ seed.seed.seed_name }}" style="background-color:rgb(88, 202, 255);">{{ seed.seed.episode }}</div>
+                                            <div class="episode" id="downloaded-sd" data-id="{{ anime.mikan_id }}" title="{{ st.seed.seed_name }}" style="background-color:rgb(88, 202, 255);">{{ episode_str }}</div>
                                         </a>
                                     {% else %}
-                                        <div class="episode" id="failed-sd" data-id="{{ anime.mikan_id }}" data-url="{{ seed.seed.seed_url }}" title="{{ seed.seed.seed_name }}" style="background-color:grey;">{{ seed.seed.episode }}</div>
+                                        <div class="episode" id="failed-sd" data-id="{{ anime.mikan_id }}" data-url="{{ st.seed.seed_url }}" title="{{ st.seed.seed_name }}" style="background-color:grey;">{{ episode_str }}</div>
                                     {% endif %}
                                 {% endfor %}
                             </div>

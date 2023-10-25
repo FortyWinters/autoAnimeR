@@ -9,7 +9,7 @@ pub struct AnimeSubgroup {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "anime_subgroup"]
+#[diesel(table_name = anime_subgroup)]
 pub struct PostAnimeSubgroup<'a> {
     pub subgroup_id: &'a i32,
     pub subgroup_name: &'a str,

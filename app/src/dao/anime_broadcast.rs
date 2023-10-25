@@ -1,5 +1,5 @@
 use anyhow::Result;
-use diesel::{RunQueryDsl, delete};
+use diesel::RunQueryDsl;
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use diesel::r2d2::{PooledConnection, ConnectionManager};

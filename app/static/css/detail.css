@@ -19,7 +19,7 @@ li {
     list-style-type: none;
 }
 .episode-container {
-    margin-top: 20px;
+    margin-top: 10px;
 }
 .episode {
     background-color: #d6d6d6;
@@ -41,12 +41,17 @@ li {
 }
 .subgroup {
     float: left;
-    width: 80px;
+    width: 70px;
     height: 30px;
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    margin-right: 10px;
+    margin-bottom: 10px;
+    padding-left: 5px;
+    padding-top: 5px;
+    border-radius: 5px;
 }
 .subgroup-container {
     width: 800px;

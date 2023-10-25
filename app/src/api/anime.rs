@@ -13,7 +13,6 @@ use crate::models::anime_list;
 use crate::models::anime_broadcast;
 use crate::models::anime_seed;
 use crate::models::anime_subgroup;
-use crate::schema::anime_seed::{seed_status, episode};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateAnimeListJson {
@@ -386,7 +385,6 @@ pub async fn anime_detail_handler(
     let db_connection = &mut pool.get().unwrap();
     let path_mikan_id = &path;
     let path_mikan_id: i32 = path_mikan_id.to_string().parse().unwrap();
-
     let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };
     let broadcast_map = get_broadcast_map().await;
     let (anime, subgroup_with_seed_list) = get_anime_seed_group_by_subgroup(path_mikan_id, db_connection).await.unwrap();
@@ -396,7 +394,7 @@ pub async fn anime_detail_handler(
     context.insert("broadcast_map", &broadcast_map);
     context.insert("broadcast_url", &broadcast_url);
     context.insert("page_flag", &0);
-    let rendered = tera.render("test.html", &context).expect("Failed to render template");
+    let rendered = tera.render("detail.html", &context).expect("Failed to render template");
     Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
 }
 
@@ -412,10 +410,10 @@ pub struct SeedWithTask {
     pub seed: anime_seed::AnimeSeed,
     pub status: i32
 }
-// 0: unused/grey
-// 1: failed/black
-// 2: downloading/blue
-// 3: downloaded/green
+// 0: unused      grey
+// 1: failed      black
+// 2: downloading blue
+// 3: downloaded  green
 
 pub async fn get_anime_seed_group_by_subgroup(
     mikan_id: i32,
@@ -439,6 +437,9 @@ pub async fn get_anime_seed_group_by_subgroup(
     let mut seed_episode_set: HashSet<i32> = HashSet::new();
     for seed in seed_list {
         seed_episode_set.insert(seed.episode);
+    }
+    if seed_episode_set.is_empty() {
+        return Ok((anime, subgroup_with_seed_list));
     }
 
     let mut seed_list_0: Vec<SeedWithTask> = Vec::new();
@@ -466,6 +467,7 @@ pub async fn get_anime_seed_group_by_subgroup(
             status: epi_status   
         });
     }
+    seed_list_0.sort_by_key(|s| s.seed.episode);
     subgroup_with_seed_list.push(SubgroupWithSeed {
         subgroup_id: 0,
         subgroup_name: "更新集数".to_string(),
@@ -475,6 +477,9 @@ pub async fn get_anime_seed_group_by_subgroup(
     let subgroup_list = dao::anime_subgroup::get_all(db_connection).await.unwrap();
     for subgroup in subgroup_list {
         let seed_list = dao::anime_seed::get_by_mikanid_subgeoupid(db_connection, mikan_id, subgroup.subgroup_id).await.unwrap();
+        if seed_list.is_empty() {
+            continue;
+        }
         let mut seed_with_task_list: Vec<SeedWithTask> = Vec::new();
         for seed in seed_list {
             let status: i32;

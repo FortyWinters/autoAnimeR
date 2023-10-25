@@ -19,6 +19,17 @@ function downloadSingleEpisodeBySubgroup(seed_url) {
 }
 
 function showSeeds(subgroupId) {
+    var allSubgroupInfoDivs = document.querySelectorAll('.subgroup');
+    allSubgroupInfoDivs.forEach(function(div) {
+        if(div.id == subgroupId) {
+            div.style.backgroundColor = "rgb(87, 136, 87)";
+            div.style.color = "white";
+        } else {
+            div.style.backgroundColor = "white";
+            div.style.color = "black";
+        }
+    });
+    
     var allSubgroupSeedDivs = document.querySelectorAll('.subgroup-seed');
     allSubgroupSeedDivs.forEach(function(div) {
         if (div.id !== subgroupId) {
