@@ -183,13 +183,13 @@ pub async fn get_broadcast_map() -> Vec<BroadcastMap> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SubscribeAnimeJson {
+pub struct AnimeRequestJson {
     pub mikan_id: i32
 }
 
 #[post("/subscribe_anime")]
 pub async fn subscribe_anime_handler(
-    item: web::Json<SubscribeAnimeJson>,
+    item: web::Json<AnimeRequestJson>,
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
     Ok(
@@ -203,7 +203,7 @@ pub async fn subscribe_anime_handler(
 
 // subscribe anime by mikan id
 pub async fn subscribe_anime(    
-    item: web::Json<SubscribeAnimeJson>,
+    item: web::Json<AnimeRequestJson>,
     pool: web::Data<Pool>
 ) -> Result<i32, Error> {
     let mikan_id = item.mikan_id;
@@ -217,7 +217,7 @@ pub async fn subscribe_anime(
 
 #[post("/cancel_subscribe_anime")]
 pub async fn cancel_subscribe_anime_handler(
-    item: web::Json<SubscribeAnimeJson>,
+    item: web::Json<AnimeRequestJson>,
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
     Ok(
@@ -231,7 +231,7 @@ pub async fn cancel_subscribe_anime_handler(
 
 // cancel subscribe anime by mikan id
 pub async fn cancel_subscribe_anime(    
-    item: web::Json<SubscribeAnimeJson>,
+    item: web::Json<AnimeRequestJson>,
     pool: web::Data<Pool>
 ) -> Result<i32, Error> {
     let mikan_id = item.mikan_id;
@@ -543,5 +543,30 @@ pub async fn recover_seed(
     } else {
         dao::anime_seed::update_seedstatus_by_mikanid_episode(db_connection, item.mikan_id, item.episode, 0).await.unwrap();
     }
+    Ok(())
+}
+
+#[post("/delete_anime_data")]
+pub async fn delete_anime_data_handler(
+    item: web::Json<AnimeRequestJson>,
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
+    Ok(
+        match delete_anime_data(item, db_connection)
+            .await {
+                Ok(data) => HttpResponse::Created().json(data),
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+pub async fn delete_anime_data(
+    item: web::Json<AnimeRequestJson>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<(), Error> {
+    dao::anime_seed::delete_anime_seed_by_mikan_id(db_connection, item.mikan_id).await.unwrap();
+    dao::anime_task::delete_anime_task_by_mikan_id(db_connection, item.mikan_id).await.unwrap();
+    // TODO qb删除
     Ok(())
 }

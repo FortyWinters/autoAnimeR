@@ -47,7 +47,7 @@ $(function() {
     });
 
     $('button.clean-button').on('click', function() {
-        var mikanId = $(this).attr('id');
+        var mikanId = parseInt($(this).attr('id'));
         this.style.backgroundColor = "#d6d6d6";
         this.disabled = true;
 
@@ -127,7 +127,16 @@ function updateAnimeList(year, season) {
 }
 
 function deleteAnimeData(mikanId) {
-    fetch("/anime/delete_anime_data?mikan_id="+mikanId, {method: 'POST'})
+    const data = {
+        mikan_id: mikanId
+    }
+    fetch("/anime/delete_anime_data", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
     .then(response => response.json())
     .then(data => {
         console.log(data)
