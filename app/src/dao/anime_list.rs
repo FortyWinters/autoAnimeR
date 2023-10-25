@@ -88,7 +88,7 @@ pub async fn update_subscribestatus_by_mikanid(
     update_subscribestatus: i32
 ) -> Result<(), diesel::result::Error> {
     diesel::update(anime_list
-        .filter(mikan_id.eq(query_mikanid)))
+            .filter(mikan_id.eq(query_mikanid)))
         .set(subscribe_status.eq(update_subscribestatus))
         .execute(db_connection)?;
     Ok(())

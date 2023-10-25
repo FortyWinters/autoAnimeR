@@ -512,3 +512,36 @@ pub async fn get_anime_seed_group_by_subgroup(
     Ok((anime, subgroup_with_seed_list))
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SeedRequestJson {
+    pub mikan_id: i32,
+    pub episode: i32,
+    pub seed_url: String
+}
+
+#[post("/recover_seed")]
+pub async fn recover_seed_handler(
+    item: web::Json<SeedRequestJson>,
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
+    Ok(
+        match recover_seed(item, db_connection)
+            .await {
+                Ok(data) => HttpResponse::Created().json(data),
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+pub async fn recover_seed(
+    item: web::Json<SeedRequestJson>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<(), Error> {
+    if item.seed_url != "" {
+        dao::anime_seed::update_seedstatus_by_seedurl(db_connection, &item.seed_url, 0).await.unwrap();
+    } else {
+        dao::anime_seed::update_seedstatus_by_mikanid_episode(db_connection, item.mikan_id, item.episode, 0).await.unwrap();
+    }
+    Ok(())
+}

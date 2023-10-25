@@ -41,7 +41,18 @@ function showSeeds(subgroupId) {
 }
 
 function recoverSingleSeed(seedUrl) {
-    fetch('/anime/recover_single_seed?seed_url=' + seedUrl, {method: 'POST'})
+    const data = {
+        mikan_id: 0,
+        episode: 0,
+        seed_url: seedUrl
+    }
+    fetch('/anime/recover_seed', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
     .then(response => response.json())
     .then(data => {
         console.log(data)
@@ -51,7 +62,18 @@ function recoverSingleSeed(seedUrl) {
 }
 
 function recoverEpisodeSeed(mikanId, episode) {
-    fetch('/anime/recover_episode_seed?mikan_id=' + mikanId + '&episode=' + episode, {method: 'POST'})
+    const data = {
+        mikan_id: mikanId,
+        episode: episode,
+        seed_url: ""  
+    }
+    fetch('/anime/recover_seed', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
     .then(response => response.json())
     .then(data => {
         console.log(data)
@@ -81,8 +103,8 @@ document.addEventListener('DOMContentLoaded', function() {
     contextMenus.forEach(function(menu) {
         menu.addEventListener('click', function(e) {
             // 在这里处理 .context-menu 元素的点击事件
-            var ep = targetElement.innerHTML;
-            var mikanId = targetElement.getAttribute("data-id");
+            var ep = parseInt(targetElement.innerHTML);
+            var mikanId = parseInt(targetElement.getAttribute("data-id"));
             var seedUrl = targetElement.getAttribute("data-url");
 
             switch (episodeId) {

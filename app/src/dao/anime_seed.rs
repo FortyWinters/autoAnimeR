@@ -80,6 +80,32 @@ pub async fn update_anime_seed_status(
     Ok(())
 }
 
+pub async fn update_seedstatus_by_seedurl(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_seedurl: &String,
+    update_seedstatus: i32
+) -> Result<(), diesel::result::Error> {
+    diesel::update(anime_seed
+            .filter(seed_url.eq(query_seedurl)))
+        .set(seed_status.eq(update_seedstatus))
+        .execute(db_connection)?;
+    Ok(())
+}
+
+pub async fn update_seedstatus_by_mikanid_episode(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_mikanid: i32,
+    query_episode: i32,
+    update_seedstatus: i32
+) -> Result<(), diesel::result::Error> {
+    diesel::update(anime_seed
+            .filter(mikan_id.eq(query_mikanid))
+            .filter(episode.eq(query_episode)))
+        .set(seed_status.eq(update_seedstatus))
+        .execute(db_connection)?;
+    Ok(())
+}
+
 #[allow(dead_code)]
 pub async fn get_anime_seed_by_mikan_id(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
