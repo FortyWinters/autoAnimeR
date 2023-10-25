@@ -7,6 +7,18 @@ use crate::api::anime::{BroadcastUrl, get_broadcast_map};
 pub async fn download_index_handler(
     tera: web::Data<tera::Tera>
 ) -> Result<HttpResponse, Error> {
+    Ok(
+        match download_index(tera)
+            .await {
+                Ok(res) => res,
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+pub async fn download_index(
+    tera: web::Data<tera::Tera>
+) -> Result<HttpResponse, Error> {
     let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };
     let broadcast_map = get_broadcast_map().await;
     let mut context = Context::new();

@@ -88,12 +88,26 @@ pub async fn anime_list_by_broadcast_handler(
     tera: web::Data<tera::Tera>,
     path: web::Path<(String, String)>
 ) -> Result<HttpResponse, Error> {
+    Ok(
+        match anime_list_by_broadcast(pool, tera, path)
+            .await {
+                Ok(res) => res,
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+pub async fn anime_list_by_broadcast(
+    pool: web::Data<Pool>,
+    tera: web::Data<tera::Tera>,
+    path: web::Path<(String, String)>
+) -> Result<HttpResponse, Error> {
     let path_year = &path.0;
     let path_season = &path.1;
     let url_year: i32 = path_year.to_string().parse().unwrap();
     let url_season: i32 = path_season.to_string().parse().unwrap();
     let broadcast_url = BroadcastUrl { url_year, url_season };
-    let anime_list = anime_list_by_broadcast(pool, url_year, url_season).await.unwrap();
+    let anime_list = get_anime_list_by_broadcast(pool, url_year, url_season).await.unwrap();
     let broadcast_map = get_broadcast_map().await;
     let mut context = Context::new();
     context.insert("anime_list", &anime_list);
@@ -104,8 +118,9 @@ pub async fn anime_list_by_broadcast_handler(
     Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
 }
 
+
 // show anime list by year & season
-pub async fn anime_list_by_broadcast(
+pub async fn get_anime_list_by_broadcast(
     pool: web::Data<Pool>,
     year: i32,
     season: i32
@@ -248,6 +263,19 @@ pub async fn anime_index_handler(
     tera: web::Data<tera::Tera>,
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
+    Ok(
+        match anime_index(tera, pool)
+            .await {
+                Ok(res) => res,
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+pub async fn anime_index(
+    tera: web::Data<tera::Tera>,
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
     let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };
     let anime_list = my_anime(pool).await.unwrap();
     let broadcast_map = get_broadcast_map().await;
@@ -364,6 +392,20 @@ fn convert_spider_subgroup_to_anime_subgroup(spider_vec: Vec<spider::Subgroup>) 
 
 #[get("/detail/{mikan_id}")]
 pub async fn anime_detail_handler(
+    pool: web::Data<Pool>,
+    tera: web::Data<tera::Tera>,
+    path: web::Path<String>
+) -> Result<HttpResponse, Error> {
+    Ok(
+        match anime_detail(pool, tera, path)
+            .await {
+                Ok(res) => res,
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+pub async fn anime_detail(
     pool: web::Data<Pool>,
     tera: web::Data<tera::Tera>,
     path: web::Path<String>
