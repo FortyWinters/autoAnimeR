@@ -23,20 +23,20 @@ function getTorrentInfo() {
                     const done = Math.round(parseFloat(info.Done.trim()));
                     htmlString += `
                         <tr>
-                            <td class="column-name" title='${info.Name}'>
+                            <td class="column-name" title='${info.anime_ame}'>
                                 <a href="/anime/detail/${info.mikan_id}">${info.anime_name}</a>
                             </td>
                             <td class="column-episode">${info.episode}</td>
                             <td class="column-progress">
                                 <progress value=${done} max="100"></progress>
                             </td>
-                            <td class="column-done">${info.Done}</td>
-                            <td class="column-speed">${info.Download_speed}</td>
-                            <td class="column-eta">${info.ETA}</td>
-                            <td class="column-peers">${info.Peers}</td>
-                            <td class="column-seeds">${info.Seeds}</td>
-                            <td class="column-size">${info.Size}</td>
-                            <td class="column-state">${info.State}</td>
+                            <td class="column-done">${info.done}</td>
+                            <td class="column-speed">${info.download_speed}</td>
+                            <td class="column-eta">${info.eta}</td>
+                            <td class="column-peers">${info.peers}</td>
+                            <td class="column-seeds">${info.seeds}</td>
+                            <td class="column-size">${info.size}</td>
+                            <td class="column-state">\${info.state\}</td>
                             <td class="column-button">
                                 <button class="task-button" id="resume" onclick="handleTaskResume('${info.torrent_name}')">恢复</button>
                                 <button class="task-button" id="pause" onclick="handleTaskPause('${info.torrent_name}')">暂停</button>

@@ -5,7 +5,6 @@ use diesel::SqliteConnection;
 use tera::Tera;
 use actix_files::Files;
 use mods::qb_api::QbitTaskExecutor;
-// use api::do_anime_task::DoAnimeTask;
 
 mod routers;
 mod schema;
@@ -22,6 +21,10 @@ pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
+
+    std::env::set_var("RUST_LOG", "debug");
+    env_logger::init();
+
     let database_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");
     let database_pool = Pool::builder()
@@ -34,16 +37,13 @@ async fn main() -> std::io::Result<()> {
         "admin".to_string(),
         "adminadmin".to_string())
         .await
-        .unwrap();
-    
-    // let mut do_anime_task = DoAnimeTask::new(web::Data::new(database_pool), qb).await.unwrap();
+        .expect("Failed to create qb client");
 
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(database_pool.clone()))
             .app_data(web::Data::new(tera.clone()))
-            .app_data(qb.clone())
-            // .app_data(do_anime_task.clone())
+            .app_data(web::Data::new(qb.clone()))
             .service(Files::new("/static", "./static").show_files_listing())
             .configure(anime_routes)
             .configure(setting_routes)

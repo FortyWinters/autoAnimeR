@@ -600,6 +600,17 @@ pub async fn delete_anime_data(
     Ok(())
 }
 
+pub async fn get_anime_id_name_map(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<HashMap<i32, String>, Error> {
+    let mut id_name_map: HashMap<i32, String> = HashMap::new();
+    let anime_list = dao::anime_list::get_all(db_connection).await.unwrap();
+    for a in anime_list {
+        id_name_map.insert(a.mikan_id, a.anime_name);
+    }
+    Ok(id_name_map)
+}
+
 // #[post("/create_task_by_seed_url")]
 // pub async fn create_task_by_seed_url_handler(
 //     item: web::Json<AnimeRequestJson>,
