@@ -38,9 +38,9 @@ function getTorrentInfo() {
                             <td class="column-size">${info.qb_info.size}</td>
                             <td class="column-state">${info.qb_info.state}</td>
                             <td class="column-button">
-                                <button class="task-button" id="resume" onclick="handleTaskResume('${info.torrent_name}')">恢复</button>
-                                <button class="task-button" id="pause" onclick="handleTaskPause('${info.torrent_name}')">暂停</button>
-                                <button class="task-button" id="delete" onclick="handleTaskDelete('${info.torrent_name}')">删除</button>
+                                <button class="task-button" id="resume" onclick="handleQbTask('${info.torrent_name}', 3)">恢复</button>
+                                <button class="task-button" id="pause" onclick="handleQbTask('${info.torrent_name}', 2)">暂停</button>
+                                <button class="task-button" id="delete" onclick="handleQbTask('${info.torrent_name}', 1)">删除</button>
                             </td>
                         </tr>`
                 });
@@ -53,41 +53,18 @@ function getTorrentInfo() {
 
 getTorrentInfo()
 
-function handleTaskDelete(torrentName) {
-    fetch("/download/delete_task_by_torrent_name?torrent_name=" + torrentName, {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            window.location.reload();
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-}
-
-function handleTaskStart(torrentName) {
-    fetch("/download/start_task_by_torrent_name?torrent_name=" + torrentName, {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            window.location.reload();
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-}
-
-function handleTaskPause(torrentName) {
-    fetch("/download/pause_task_by_torrent_name?torrent_name=" + torrentName, {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            window.location.reload();
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-}
-
-function handleTaskResume(torrent_name) {
-    fetch("/download/resume_task_by_torrent_name?torrent_name=" + torrent_name, {method: 'POST'})
+function handleQbTask(torrentName, executeType) {
+    const data = {
+        torrnet_name: torrentName,
+        execute_type: executeType
+    }
+    fetch("/download/qb_execute", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
         .then(response => response.json())
         .then(data => {
             window.location.reload();

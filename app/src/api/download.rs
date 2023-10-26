@@ -1,4 +1,4 @@
-use actix_web::{get, web, HttpResponse, Error};
+use actix_web::{post, get, web, HttpResponse, Error};
 use anyhow::Result;
 use tera::Context;
 use serde::{Deserialize, Serialize};
@@ -82,4 +82,49 @@ pub async fn get_qb_download_progress(
         });
     }
     Ok(task_qb_info_list)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QbExecuteJson {
+    pub torrent_name: String,
+    pub execute_type: i32
+}
+// 1: delete
+// 2: pause
+// 3: resume
+
+#[post("/qb_execute")]
+pub async fn qb_execute_handler(
+    item: web::Json<QbExecuteJson>,
+    pool: web::Data<Pool>,
+    qb: web::Data<QbitTaskExecutor>
+) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
+    Ok(
+        match qb_execute(item, db_connection, qb)
+            .await {
+                Ok(data) => HttpResponse::Created().json(data),
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+pub async fn qb_execute(
+    item: web::Json<QbExecuteJson>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    qb: web::Data<QbitTaskExecutor>
+) -> Result<(), Error> {
+    let torrent_name = item.torrent_name.clone();
+    match item.execute_type {
+        // delete
+        1 => { 
+            qb.qb_api_del_torrent(torrent_name.clone()).await.unwrap();
+            dao::anime_task::delete_anime_task_by_torrent_name(db_connection, torrent_name).await.unwrap();
+        },
+        // pause
+        2 => qb.qb_api_pause_torrent(torrent_name).await.unwrap(),
+        // resume
+        _ => qb.qb_api_resume_torrent(torrent_name).await.unwrap(),
+    }
+    Ok(())
 }

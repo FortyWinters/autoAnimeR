@@ -31,5 +31,6 @@ pub fn download_routes(cfg: &mut web::ServiceConfig) {
         web::scope("/download")
             .service(download_index_handler)
             .service(qb_download_progress_handler)
+            .service(qb_execute_handler)
     );
 }
