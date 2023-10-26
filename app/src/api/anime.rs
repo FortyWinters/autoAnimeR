@@ -425,13 +425,14 @@ fn convert_spider_subgroup_to_anime_subgroup(
 
 #[get("/detail/{mikan_id}")]
 pub async fn anime_detail_handler(
+    qb: web::Data<QbitTaskExecutor>,
     pool: web::Data<Pool>,
     tera: web::Data<tera::Tera>,
     path: web::Path<String>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
     Ok(
-        match anime_detail(db_connection, tera, path)
+        match anime_detail(&qb, db_connection, tera, path)
             .await {
                 Ok(res) => res,
                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
@@ -440,12 +441,12 @@ pub async fn anime_detail_handler(
 }
 
 pub async fn anime_detail(
+    qb: & web::Data<QbitTaskExecutor>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     tera: web::Data<tera::Tera>,
     path: web::Path<String>
 ) -> Result<HttpResponse, Error> {
-    // TODO qb与anime_task同步
-    
+    do_anime_task::update_qb_task_status(&qb, db_connection).await.unwrap();
     let path_mikan_id = &path;
     let path_mikan_id: i32 = path_mikan_id.to_string().parse().unwrap();
     let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };

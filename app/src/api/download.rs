@@ -9,14 +9,17 @@ use crate::mods::qb_api::{QbitTaskExecutor, TorrentInfo};
 use crate::Pool;
 use crate::dao;
 use crate::api::anime::get_anime_id_name_map;
-
+use crate::api::do_anime_task;
 
 #[get("/")]
 pub async fn download_index_handler(
-    tera: web::Data<tera::Tera>
+    tera: web::Data<tera::Tera>,
+    pool: web::Data<Pool>,
+    qb: web::Data<QbitTaskExecutor>
 ) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
     Ok(
-        match download_index(tera)
+        match download_index(tera, &qb, db_connection)
             .await {
                 Ok(res) => res,
                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
@@ -25,10 +28,13 @@ pub async fn download_index_handler(
 }
 
 pub async fn download_index(
-    tera: web::Data<tera::Tera>
+    tera: web::Data<tera::Tera>,
+    qb: &web::Data<QbitTaskExecutor>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+
 ) -> Result<HttpResponse, Error> {
     // TODO qb与anime_task同步
-
+    do_anime_task::update_qb_task_status(&qb, db_connection).await.unwrap();
     let broadcast_url = BroadcastUrl { url_year: 0, url_season : 0 };
     let broadcast_map = get_broadcast_map().await;
     let mut context = Context::new();

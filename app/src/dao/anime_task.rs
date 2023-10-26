@@ -10,7 +10,7 @@ use crate::schema::anime_task::dsl::*;
 #[allow(dead_code)]
 pub async fn add(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    item: AnimeTaskJson
+    item: &AnimeTaskJson
 ) -> Result<AnimeTask, diesel::result::Error> {
     match anime_task
         .filter(torrent_name.eq(&item.torrent_name))
@@ -133,8 +133,8 @@ pub async fn update_qb_task_status(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: String // torrent_name
 ) -> Result<(), diesel::result::Error> {
-    if let Ok(_) = anime_task.filter(torrent_name.eq(&item)).first::<AnimeTask>(db_connection) {
-        update(anime_task.filter(torrent_name.eq(&item)))
+    if let Ok(_) = anime_task.filter(torrent_name.like(&item)).first::<AnimeTask>(db_connection) {
+        update(anime_task.filter(torrent_name.like(&item)))
             .set(qb_task_status.eq(1))
             .execute(db_connection)
             .expect("save failed");
@@ -213,7 +213,7 @@ mod test {
             qb_task_status: 0,
         };
 
-        add(db_connection, test_anime_task_json).await.unwrap();
+        add(db_connection, &test_anime_task_json).await.unwrap();
     }
 
     #[tokio::test]

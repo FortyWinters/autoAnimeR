@@ -238,11 +238,11 @@ impl QbitTaskExecutor {
 
         let completed_torrent_response_text = completed_torrent_response.text().await?;
         let json: serde_json::Value = serde_json::from_str(&completed_torrent_response_text).unwrap();
-        let mut torrent_list: Vec<String> = Vec::new();
+        let mut torrent_hash_list: Vec<String> = Vec::new();
 
         if let serde_json::Value::Array(torrents) = json {
             for torrent in torrents {
-                torrent_list.push(torrent["hash"]
+                torrent_hash_list.push(torrent["hash"]
                                 .as_str()
                                 .ok_or("Field not found")
                                 .unwrap()
@@ -251,7 +251,7 @@ impl QbitTaskExecutor {
             }
         } 
 
-        Ok(torrent_list)
+        Ok(torrent_hash_list)
     }
 
 }

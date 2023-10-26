@@ -94,8 +94,18 @@ pub async fn create_anime_task_by_seed (
     db_connection: & mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<(), Error>{
     match download_seed_handler(anime_seed, mikan).await.unwrap() {
-        DownloadSeedStatus::SUCCESS(seed) => {
-            Ok(create_qb_task(&qb_task_executor, db_connection, &seed).await.unwrap())
+        DownloadSeedStatus::SUCCESS(anime_seed) => {
+            let anime_task_info = AnimeTaskJson { 
+                mikan_id       : anime_seed.mikan_id.clone(), 
+                episode        : anime_seed.episode.clone(), 
+                torrent_name   : anime_seed.seed_url
+                                    .rsplit("/")
+                                    .next()
+                                    .unwrap_or(&anime_seed.seed_url)
+                                    .to_string(),
+                qb_task_status : 0 };
+            dao::anime_task::add(db_connection, &anime_task_info).await.unwrap();
+            Ok(create_qb_task(&qb_task_executor, db_connection, &anime_seed).await.unwrap())
         }
         DownloadSeedStatus::FAILED(_) => Err(Error::msg("message"))
     } 
@@ -196,6 +206,22 @@ pub async fn create_qb_task(
     Ok(())
 }
 
+// update_qb_task_status
+#[allow(dead_code)]
+pub async fn update_qb_task_status(
+    qb_task_executor: &QbitTaskExecutor,
+    db_connection: & mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) 
+-> Result<(), Error>{
+    let fn_task_vec = qb_task_executor.qb_api_completed_torrent_list().await.unwrap();
+
+    for fn_task in fn_task_vec {
+        dao::anime_task::update_qb_task_status(db_connection, fn_task).await.unwrap();
+    }
+    Ok(())
+}
+
+
 pub async fn download_seed_handler(
     anime_seed: AnimeSeed,
     mikan: &Mikan
@@ -217,15 +243,11 @@ pub async fn run(
     let subscribed_anime_vec = dao::anime_list::get_by_subscribestatus(db_connection, 1).await.unwrap();
 
     let st_anime_vec = do_spider_task(&mikan, subscribed_anime_vec, db_connection).await;
-    let new_seed_vec = dao::anime_seed::add_bulk_with_response(db_connection, st_anime_vec).await.unwrap().success_vec;
+    let _new_seed_vec = dao::anime_seed::add_bulk_with_response(db_connection, st_anime_vec).await.unwrap().success_vec;
 
-    if new_seed_vec.len() > 0 {
-        log::info!("Create anime task start");
-        create_anime_task_bulk(&mikan, qb_task_executor, db_connection).await.unwrap();
-        log::info!("Create anime task done");
-    }
-    
-    // update_qb_task_status
+    log::info!("Create anime task start");
+    create_anime_task_bulk(&mikan, qb_task_executor, db_connection).await.unwrap();
+    log::info!("Create anime task done");
 }
 
 #[allow(dead_code)]
