@@ -6,9 +6,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, HashMap};
 use diesel::r2d2::{PooledConnection, ConnectionManager};
 use diesel::SqliteConnection;
+use futures::future::join_all;
 use crate::Pool;
 use crate::dao;
-use crate::mods::spider;
+use crate::mods::spider::{self, Mikan};
 // use crate::mods::qb_api::QbitTaskExecutor;
 use crate::models::anime_list;
 use crate::models::anime_broadcast;
@@ -66,15 +67,26 @@ pub async fn update_anime_list(
     dao::anime_list::add_vec(db_connection, anime_list_json_vec).await.unwrap();
     dao::anime_broadcast::add_vec(db_connection, anime_broadcast_json_vec).await.unwrap();
 
-    // TODO 需多线程重构
     let  save_path = "static/img/anime_list".to_string();
-    for img_url in &img_url_vec {
-        if let Err(_) = mikan.download_img(img_url, &save_path).await {
-            println!("download img failed, img_url:{}", img_url);
-        }
+    if !img_url_vec.is_empty() {
+        let _ = join_all(img_url_vec
+            .into_iter()
+            .map(|img_url|{
+                download_anime_img(img_url, &save_path, mikan.clone())
+            })).await;
     }
 
     Ok(anime_list.len())
+}
+
+pub async fn download_anime_img(
+    img_url: String,
+    save_path: &str,
+    mikan: Mikan
+)->Result<(), Error> {
+    Ok(
+        mikan.download_img(&img_url, save_path).await.unwrap()
+    )
 }
 
 #[derive(Debug, Serialize, Deserialize)]
