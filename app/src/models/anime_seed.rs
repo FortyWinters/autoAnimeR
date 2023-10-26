@@ -25,7 +25,7 @@ pub struct PostAnimeSeed<'a> {
     pub seed_size: &'a str
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AnimeSeedJson {
     pub mikan_id: i32,
     pub subgroup_id: i32,
