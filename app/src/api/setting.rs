@@ -1,7 +1,12 @@
-use actix_web::{get, web, HttpResponse, Error};
+use actix_web::{post,get, web, HttpResponse, Error};
 use anyhow::Result;
 use tera::Context;
 use crate::api::anime::{BroadcastUrl, get_broadcast_map};
+use crate::api::do_anime_task;
+use std::sync::Arc;
+use tokio::sync::RwLock as TokioRwLock;
+use crate::Pool;
+use crate::mods::qb_api::QbitTaskExecutor;
 
 #[get("/")]
 pub async fn setting_index_handler(
@@ -27,4 +32,25 @@ pub async fn setting_index(
     context.insert("page_flag", &0);
     let rendered = tera.render("setting.html", &context).expect("Failed to render template");
     Ok(HttpResponse::Ok().content_type("text/html").body(rendered))
+}
+
+#[post("/exit")]
+pub async fn exit_schedule_task_handler(
+    status: web::Data<Arc<TokioRwLock<bool>>>
+) -> Result<HttpResponse, Error> {
+    do_anime_task::exit_task(&status).await;
+    Ok(HttpResponse::Ok().body("ok"))
+}
+
+#[post("/start")]
+pub async fn start_schedule_task_handler(
+    status: web::Data<Arc<TokioRwLock<bool>>>,
+    qb: web::Data<QbitTaskExecutor>,
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
+    let run_handle = tokio::spawn(async move {
+        do_anime_task::run_task(&status, &qb, &mut pool.get().unwrap()).await;
+    });
+    run_handle.await.unwrap();
+    Ok(HttpResponse::Ok().body("ok"))
 }

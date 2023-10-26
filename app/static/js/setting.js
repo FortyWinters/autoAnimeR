@@ -6,7 +6,7 @@ $(function() {
 
         var interval = 2
 
-        fetch("/setting/start_main_task?interval=" + interval, {method: 'POST'})
+        fetch("/setting/start", {method: 'POST'})
         .then(response => response.json())
         .then(data => {
             console.log(data)
@@ -24,7 +24,7 @@ $(function() {
         this.disabled = true;
         this.style.backgroundColor = "#d6d6d6";
 
-        fetch("/setting/stop_main_task", {method: 'POST'})
+        fetch("/setting/exit", {method: 'POST'})
         .then(response => response.json())
         .then(data => {
             console.log(data)

@@ -22,6 +22,8 @@ pub fn setting_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/setting")
             .service(setting_index_handler)
+            .service(exit_schedule_task_handler)
+            .service(start_schedule_task_handler)
     );
 }
 

@@ -12,8 +12,8 @@ mod api;
 mod models;
 mod dao;
 mod mods;
-
-use log;
+use std::sync::Arc;
+use tokio::sync::RwLock as TokioRwLock;
 use log4rs;
 
 #[macro_use]
@@ -41,11 +41,14 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to create qb client");
 
+    let tastk_status = Arc::new(TokioRwLock::new(false));
+
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(database_pool.clone()))
             .app_data(web::Data::new(tera.clone()))
             .app_data(web::Data::new(qb.clone()))
+            .app_data(web::Data::new(tastk_status.clone()))
             .service(Files::new("/static", "./static").show_files_listing())
             .configure(anime_routes)
             .configure(setting_routes)
