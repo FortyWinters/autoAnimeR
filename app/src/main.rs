@@ -13,6 +13,9 @@ mod models;
 mod dao;
 mod mods;
 
+use log;
+use log4rs;
+
 #[macro_use]
 extern crate diesel;
 
@@ -22,8 +25,7 @@ pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
 
-    std::env::set_var("RUST_LOG", "debug");
-    env_logger::init();
+    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
 
     let database_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");
