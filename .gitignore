@@ -21,3 +21,5 @@ diesel.toml
 
 *.jpg
 *.torrent
+
+*.log

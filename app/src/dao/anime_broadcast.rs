@@ -14,6 +14,8 @@ pub async fn add(
 ) -> Result<AnimeBroadcast, diesel::result::Error> {
     match anime_broadcast
         .filter(mikan_id.eq(&item.mikan_id))
+        .filter(year.eq(&item.year))
+        .filter(season.eq(&item.season))
         .first::<AnimeBroadcast>(db_connection) {
         Ok(result) => Ok(result),
         Err(_) => {
@@ -42,6 +44,8 @@ pub async fn add_vec(
     for item in &item_vec {
         if let Err(_) = anime_broadcast
             .filter(mikan_id.eq(&item.mikan_id))
+            .filter(year.eq(&item.year))
+            .filter(season.eq(&item.season))
             .first::<AnimeBroadcast>(db_connection) {
             let new_anime_broadcast = PostAnimeBroadcast{
                 mikan_id : &item.mikan_id,
