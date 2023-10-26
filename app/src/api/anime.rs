@@ -351,7 +351,6 @@ pub async fn update_anime_seed_handler(
     )
 }
 
-// TODO 单线程需重构
 pub async fn get_anime_seed(    
     mikan_id: i32,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
@@ -359,25 +358,44 @@ pub async fn get_anime_seed(
     let mikan = spider::Mikan::new()?;
     let anime_info = dao::anime_list::get_by_mikanid(db_connection, mikan_id).await.unwrap();
     let anime_type = anime_info.anime_type;
-    let mut seed_vec: Vec<anime_seed::AnimeSeedJson> = Vec::new();
+    
     let subgroup_list = mikan.get_subgroup(mikan_id).await.expect("get subgroup failed");
-    for subgroup in &subgroup_list {
-        if let Ok(seed_list) = get_seed_by_subgroup(mikan.clone(), mikan_id, subgroup.subgroup_id, anime_type).await {
-            seed_vec.extend(seed_list);
-        }
+    let mut subgroup_id_vec: Vec<i32> = Vec::new();
+    for s in &subgroup_list {
+        subgroup_id_vec.push(s.subgroup_id);
     }
-    let number = seed_vec.len();
-    dao::anime_seed::add_bulk(db_connection, seed_vec).await.unwrap();
     let anime_subgroup_list = convert_spider_subgroup_to_anime_subgroup(subgroup_list);
     dao::anime_subgroup::add_vec(db_connection, anime_subgroup_list).await.unwrap();
+
+    let mut seed_vec: Vec<anime_seed::AnimeSeedJson> = Vec::new();
+    if !subgroup_id_vec.is_empty() {
+        let task_res_vec = join_all(subgroup_id_vec
+            .into_iter()
+            .map(|subgroup_id|{
+                get_anime_seed_by_spider(mikan_id, subgroup_id, anime_type, mikan.clone())
+            })).await;
+
+        for task_res in task_res_vec {
+            match task_res {
+                Ok(seed_list) => {
+                    seed_vec.extend(seed_list);
+                }
+                Err(_) => continue
+            }
+        }
+    }
+
+    let number = seed_vec.len();
+    dao::anime_seed::add_bulk(db_connection, seed_vec).await.unwrap();
+
     Ok(number)
 }
 
-pub async fn get_seed_by_subgroup(
-    mikan: spider::Mikan,
+pub async fn get_anime_seed_by_spider(
     mikan_id: i32,
     subgroup_id: i32,
-    anime_type: i32
+    anime_type: i32,
+    mikan: spider::Mikan,
 ) -> Result<Vec<anime_seed::AnimeSeedJson>, Error> {
     let seed_list: Vec<spider::Seed> = mikan.get_seed(mikan_id, subgroup_id, anime_type).await.unwrap();
     Ok(convert_spider_seed_to_anime_seed(seed_list))
