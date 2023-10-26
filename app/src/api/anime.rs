@@ -72,7 +72,7 @@ pub async fn update_anime_list(
         let _ = join_all(img_url_vec
             .into_iter()
             .map(|img_url|{
-                download_anime_img(img_url, &save_path, mikan.clone())
+                download_anime_img(img_url, &save_path, &mikan)
             })).await;
     }
 
@@ -82,7 +82,7 @@ pub async fn update_anime_list(
 pub async fn download_anime_img(
     img_url: String,
     save_path: &str,
-    mikan: Mikan
+    mikan: &Mikan
 )->Result<(), Error> {
     Ok(
         mikan.download_img(&img_url, save_path).await.unwrap()
@@ -372,7 +372,7 @@ pub async fn get_anime_seed(
         let task_res_vec = join_all(subgroup_id_vec
             .into_iter()
             .map(|subgroup_id|{
-                get_anime_seed_by_spider(mikan_id, subgroup_id, anime_type, mikan.clone())
+                get_anime_seed_by_spider(mikan_id, subgroup_id, anime_type, &mikan)
             })).await;
 
         for task_res in task_res_vec {
@@ -395,7 +395,7 @@ pub async fn get_anime_seed_by_spider(
     mikan_id: i32,
     subgroup_id: i32,
     anime_type: i32,
-    mikan: spider::Mikan,
+    mikan: &spider::Mikan,
 ) -> Result<Vec<anime_seed::AnimeSeedJson>, Error> {
     let seed_list: Vec<spider::Seed> = mikan.get_seed(mikan_id, subgroup_id, anime_type).await.unwrap();
     Ok(convert_spider_seed_to_anime_seed(seed_list))
