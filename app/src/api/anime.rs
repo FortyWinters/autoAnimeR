@@ -550,8 +550,10 @@ pub async fn get_anime_seed_group_by_subgroup(
             if seed.seed_status == 0 {
                 status = 0;
             } else {
-                if let Some(task_status) = task_url_map.get(&seed.seed_url) {
-                    status = *task_status + 2;
+                let mut parts = seed.seed_url.split('/');
+                let torent_name = parts.nth(3).unwrap();
+                if let Some(value) = task_url_map.get(torent_name) {
+                    status = 2 + value;
                 } else {
                     status = 1;
                 }
