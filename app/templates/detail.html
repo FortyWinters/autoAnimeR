@@ -68,7 +68,7 @@
                                     {% if st.status == 3 %}
                                         <div class="episode" id="downloaded-ep" data-id="{{ anime.mikan_id }}" style="background-color:rgb(41, 207, 132);">{{ episode_str }}</div>
                                     {% elif st.status == 2 %}
-                                        <a href="/download">
+                                        <a href="/download/">
                                             <div class="episode" id="downloaded-ep" data-id="{{ anime.mikan_id }}" style="background-color:rgb(88, 202, 255);">{{ episode_str }}</div>
                                         </a>
                                     {% else %}
@@ -89,7 +89,7 @@
                                     {% elif st.status == 3 %}
                                         <div class="episode" id="downloaded-sd" data-id="{{ anime.mikan_id }}" title="{{ st.seed.seed_name }}" style="background-color:rgb(41, 207, 132);">{{ episode_str }}</div>
                                     {% elif st.status == 2 %}
-                                        <a href="/download">
+                                        <a href="/download/">
                                             <div class="episode" id="downloaded-sd" data-id="{{ anime.mikan_id }}" title="{{ st.seed.seed_name }}" style="background-color:rgb(88, 202, 255);">{{ episode_str }}</div>
                                         </a>
                                     {% else %}

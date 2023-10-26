@@ -1,5 +1,16 @@
-function downloadSingleEpisode(mikan_id, episode) {
-    fetch('/anime/download_single_episode?mikan_id=' + mikan_id + '&episode=' + episode, {method: 'POST'})
+function downloadSingleEpisode(mikanId, episode) {
+    const data = {
+        mikan_id: mikanId,
+        episode: episode,
+        seed_url: ""
+    }  
+    fetch('/anime/create_task_by_episode', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
         .then(response => response.json())
         .then(data => {
             console.log(data)

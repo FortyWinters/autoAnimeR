@@ -663,8 +663,9 @@ pub async fn create_task_by_seed_url(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     qb: web::Data<QbitTaskExecutor>
 ) -> Result<(), Error> {
+    let mikan = spider::Mikan::new().unwrap();
     let seed_resp = dao::anime_seed::update_seedstatus_by_seedurl_with_response(db_connection, &item.seed_url, 1).await.unwrap();
-    do_anime_task::create_qb_task(&qb, db_connection, seed_resp.success_vec.get(0).unwrap()).await.unwrap();
+    do_anime_task::create_anime_task_by_seed(&mikan, seed_resp.success_vec.get(0).unwrap().clone(), &qb, db_connection,).await.unwrap();
     Ok(())
 }
 
@@ -689,7 +690,7 @@ pub async fn create_task_by_episode(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     qb: web::Data<QbitTaskExecutor>
 ) -> Result<(), Error> {
-    let seed_resp = dao::anime_seed::update_seedstatus_by_seedurl_with_response(db_connection, &item.seed_url, 1).await.unwrap();
-    do_anime_task::create_qb_task(&qb, db_connection, seed_resp.success_vec.get(0).unwrap()).await.unwrap();
+    let mikan = spider::Mikan::new().unwrap();
+    do_anime_task::create_anime_task_single(&mikan, &qb, db_connection, item.mikan_id, item.episode).await.unwrap();
     Ok(())
 }

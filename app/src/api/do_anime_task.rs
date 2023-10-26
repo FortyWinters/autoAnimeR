@@ -56,7 +56,7 @@ pub async fn create_anime_task_bulk(
 #[allow(dead_code)]
 pub async fn create_anime_task_single(
     mikan: &Mikan,
-    qb_task_executor: QbitTaskExecutor,
+    qb_task_executor: &QbitTaskExecutor,
     db_connection: & mut PooledConnection<ConnectionManager<SqliteConnection>>,
     mikan_id: i32, 
     episode: i32 // anime_task_idx
@@ -217,9 +217,9 @@ pub async fn run(
     let subscribed_anime_vec = dao::anime_list::get_by_subscribestatus(db_connection, 1).await.unwrap();
 
     let st_anime_vec = do_spider_task(&mikan, subscribed_anime_vec, db_connection).await;
-    let new_seed_vec = dao::anime_seed::add_bulk_with_response(db_connection, st_anime_vec).await.unwrap();
+    let new_seed_vec = dao::anime_seed::add_bulk_with_response(db_connection, st_anime_vec).await.unwrap().success_vec;
 
-    if new_seed_vec.sucess_vec.len() > 0 {
+    if new_seed_vec.len() > 0 {
         log::info!("Create anime task start");
         create_anime_task_bulk(&mikan, qb_task_executor, db_connection).await.unwrap();
         log::info!("Create anime task done");
