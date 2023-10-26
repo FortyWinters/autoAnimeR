@@ -10,11 +10,12 @@ use futures::future::join_all;
 use crate::Pool;
 use crate::dao;
 use crate::mods::spider::{self, Mikan};
-// use crate::mods::qb_api::QbitTaskExecutor;
+use crate::mods::qb_api::QbitTaskExecutor;
 use crate::models::anime_list;
 use crate::models::anime_broadcast;
 use crate::models::anime_seed;
 use crate::models::anime_subgroup;
+use crate::api::do_anime_task;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateAnimeListJson {
@@ -641,28 +642,54 @@ pub async fn get_anime_id_name_map(
     Ok(id_name_map)
 }
 
-// #[post("/create_task_by_seed_url")]
-// pub async fn create_task_by_seed_url_handler(
-//     item: web::Json<AnimeRequestJson>,
-//     pool: web::Data<Pool>,
-//     qb: web::Data<QbitTaskExecutor>
-// ) -> Result<HttpResponse, Error> {
-//     let db_connection = &mut pool.get().unwrap();
-//     Ok(
-//         match create_task_by_seed_url_handler(item, db_connection, qb)
-//             .await {
-//                 Ok(data) => HttpResponse::Created().json(data),
-//                 _ => HttpResponse::from(HttpResponse::InternalServerError()),
-//             },
-//     )
-// }
+#[post("/create_task_by_seed_url")]
+pub async fn create_task_by_seed_url_handler(
+    item: web::Json<SeedRequestJson>,
+    pool: web::Data<Pool>,
+    qb: web::Data<QbitTaskExecutor>
+) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
+    Ok(
+        match create_task_by_seed_url(item, db_connection, qb)
+            .await {
+                Ok(data) => HttpResponse::Created().json(data),
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
 
-// pub async fn create_task_by_seed_url(
-//     item: web::Json<AnimeRequestJson>,
-//     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-//     qb: web::Data<QbitTaskExecutor>
-// ) -> Result<i32, Error> {
-    
+pub async fn create_task_by_seed_url(
+    item: web::Json<SeedRequestJson>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    qb: web::Data<QbitTaskExecutor>
+) -> Result<(), Error> {
+    let seed_resp = dao::anime_seed::update_seedstatus_by_seedurl_with_response(db_connection, &item.seed_url, 1).await.unwrap();
+    do_anime_task::create_qb_task(&qb, db_connection, seed_resp.success_vec.get(0).unwrap()).await.unwrap();
+    Ok(())
+}
 
-//     Ok(1);
-// }
+#[post("/create_task_by_episode")]
+pub async fn create_task_by_episode_handler(
+    item: web::Json<SeedRequestJson>,
+    pool: web::Data<Pool>,
+    qb: web::Data<QbitTaskExecutor>
+) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
+    Ok(
+        match create_task_by_episode(item, db_connection, qb)
+            .await {
+                Ok(data) => HttpResponse::Created().json(data),
+                _ => HttpResponse::from(HttpResponse::InternalServerError()),
+            },
+    )
+}
+
+pub async fn create_task_by_episode(
+    item: web::Json<SeedRequestJson>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    qb: web::Data<QbitTaskExecutor>
+) -> Result<(), Error> {
+    let seed_resp = dao::anime_seed::update_seedstatus_by_seedurl_with_response(db_connection, &item.seed_url, 1).await.unwrap();
+    do_anime_task::create_qb_task(&qb, db_connection, seed_resp.success_vec.get(0).unwrap()).await.unwrap();
+    Ok(())
+}

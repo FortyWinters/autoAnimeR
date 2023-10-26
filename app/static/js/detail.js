@@ -8,8 +8,19 @@ function downloadSingleEpisode(mikan_id, episode) {
         .catch(error => console.error('Error:', error));
 }
 
-function downloadSingleEpisodeBySubgroup(seed_url) {
-    fetch('/anime/download_single_episode_by_subgroup?seed_url=' + seed_url, {method: 'POST'})
+function downloadSingleEpisodeBySubgroup(seedUrl) {
+    const data = {
+        mikan_id: 0,
+        episode: 0,
+        seed_url: seedUrl
+    }  
+    fetch("/anime/create_task_by_seed_url", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
         .then(response => response.json())
         .then(data => {
             console.log(data)

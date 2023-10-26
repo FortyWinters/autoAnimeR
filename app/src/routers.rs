@@ -13,7 +13,7 @@ pub fn anime_routes(cfg: &mut web::ServiceConfig) {
             .service(anime_detail_handler)
             .service(recover_seed_handler)
             .service(delete_anime_data_handler)
-            // .service(create_task_by_seed_url_handler)
+            .service(create_task_by_seed_url_handler)
     );
 }
 

@@ -6,8 +6,8 @@ use crate::models::anime_seed::*;
 use crate::schema::anime_seed::dsl::*;
 
 pub struct DaoResponse<T> {
-    pub sucess_vec: Vec<T>,
-    pub fail_vec: Vec<T>
+    pub success_vec: Vec<T>,
+    pub failed_vec: Vec<T>
 }
 
 // insert single data into anime_seed
@@ -75,8 +75,8 @@ pub async fn add_bulk_with_response(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item_vec: Vec<AnimeSeedJson>
 ) -> Result<DaoResponse<AnimeSeedJson>, diesel::result::Error> {
-    let mut sucess_vec: Vec<AnimeSeedJson> = Vec::new();
-    let mut fail_vec: Vec<AnimeSeedJson> = Vec::new();
+    let mut success_vec: Vec<AnimeSeedJson> = Vec::new();
+    let mut failed_vec: Vec<AnimeSeedJson> = Vec::new();
 
     for item in &item_vec {
         if let Err(_) = anime_seed.filter(seed_url.eq(&item.seed_url)).first::<AnimeSeed>(db_connection) {
@@ -93,15 +93,15 @@ pub async fn add_bulk_with_response(
                 .values(&new_anime_seed)
                 .execute(db_connection)
                 .expect("save failed");
-            sucess_vec.push(item.clone());
+            success_vec.push(item.clone());
         } else {
-            fail_vec.push(item.clone());
+            failed_vec.push(item.clone());
         }
     }
     Ok(
         DaoResponse { 
-            sucess_vec, 
-            fail_vec
+            success_vec, 
+            failed_vec
         }
     )
 }
@@ -130,6 +130,42 @@ pub async fn update_seedstatus_by_seedurl(
         .set(seed_status.eq(update_seedstatus))
         .execute(db_connection)?;
     Ok(())
+}
+
+pub async fn update_seedstatus_by_seedurl_with_response(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_seedurl: &String,
+    update_seedstatus: i32
+) -> Result<DaoResponse<AnimeSeed>, diesel::result::Error> {
+    let mut success_vec: Vec<AnimeSeed> = Vec::new();
+    let mut failed_vec: Vec<AnimeSeed> = Vec::new();
+
+    match anime_seed
+        .filter(seed_url.eq(query_seedurl))
+        .first::<AnimeSeed>(db_connection) {
+            Ok(result) => {
+                success_vec.push(result);
+            },
+            Err(_) => {
+                failed_vec.push(AnimeSeed { 
+                    id          : Some(-1), 
+                    mikan_id    : 0, 
+                    subgroup_id : 0, 
+                    episode     : 0, 
+                    seed_name   : "".to_string(), 
+                    seed_url    : query_seedurl.clone(), 
+                    seed_status : -1, 
+                    seed_size   : "".to_string() });
+            }
+        }
+
+    match diesel::update(anime_seed
+        .filter(seed_url.eq(query_seedurl)))
+        .set(seed_status.eq(update_seedstatus))
+        .execute(db_connection) {
+            Ok(_) => Ok(DaoResponse{success_vec, failed_vec}),
+            Err(e) => Err(e)
+        }
 }
 
 pub async fn update_seedstatus_by_mikanid_episode(

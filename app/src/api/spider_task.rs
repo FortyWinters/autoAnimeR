@@ -155,6 +155,6 @@ mod test {
 
         let st_anime_vec = spider_task::do_spider_task(&mikan, subscribed_anime_vec, db_connection).await;
         let new_seed_vec = dao::anime_seed::add_bulk_with_response(db_connection, st_anime_vec).await.unwrap();
-        println!("{:?}", new_seed_vec.sucess_vec);
+        println!("{:?}", new_seed_vec.success_vec);
     }
 }
