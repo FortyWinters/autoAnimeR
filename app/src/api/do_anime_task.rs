@@ -268,7 +268,7 @@ pub async fn run_task(
         drop(reader);
 
         if val {
-            log::info!("Running scheduled task");
+            log::info!("Running scheduled task with interval 2 min");
             run(qb_task_executor, db_connection).await;
             time::sleep(Duration::from_secs(interval)).await;
         } else {
@@ -283,6 +283,33 @@ pub async fn exit_task(status: &Arc<TokioRwLock<bool>>) {
     let mut writer = status.write().await;
     *writer = false;
     println!("{}", writer);
+}
+
+pub async fn change_task_interval (
+    interval: i32,
+    status: &Arc<TokioRwLock<bool>>,
+    qb_task_executor: &QbitTaskExecutor,
+    db_connection: & mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) {
+    let interval = interval as u64 * 60 ;
+    {
+        let mut writer = status.write().await;
+        *writer = true;
+    }
+    log::info!("Start scheduled task");
+    loop {
+        let reader = status.read().await;
+        let val = *reader;
+        drop(reader);
+
+        if val {
+            log::info!("Running scheduled task with interval: {} min", interval);
+            run(qb_task_executor, db_connection).await;
+            time::sleep(Duration::from_secs(interval)).await;
+        } else {
+            break;
+        }
+    }
 }
 
 #[cfg(test)]

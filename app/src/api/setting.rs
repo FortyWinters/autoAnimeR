@@ -7,6 +7,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
 use crate::Pool;
 use crate::mods::qb_api::QbitTaskExecutor;
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TaskInterval {
+    pub interval: i32
+}
 
 #[get("/")]
 pub async fn setting_index_handler(
@@ -50,6 +55,21 @@ pub async fn start_schedule_task_handler(
 ) -> Result<HttpResponse, Error> {
     let run_handle = tokio::spawn(async move {
         do_anime_task::run_task(&status, &qb, &mut pool.get().unwrap()).await;
+    });
+    run_handle.await.unwrap();
+    Ok(HttpResponse::Ok().body("ok"))
+}
+
+#[post("/change_interval")]
+pub async fn change_task_interval_handler(
+    item: web::Json<TaskInterval>,
+    status: web::Data<Arc<TokioRwLock<bool>>>,
+    qb: web::Data<QbitTaskExecutor>,
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
+    do_anime_task::exit_task(&status).await;
+    let run_handle = tokio::spawn(async move {
+        do_anime_task::change_task_interval(item.interval, &status, &qb, &mut pool.get().unwrap()).await;
     });
     run_handle.await.unwrap();
     Ok(HttpResponse::Ok().body("ok"))
