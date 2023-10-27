@@ -59,24 +59,24 @@ function submitForm(event) {
         });
   }
 
-function getDaemonPid() {
-  fetch('/setting/get_daemon_pid', {method: 'GET'})
-      .then(response => response.json())
-      .then(data => {
-          const info_list = data.data;
-          const infoDiv = document.getElementById('daemon-pid');
-          var html_string = '定时任务pid: '
-          if (info_list != null) {
-              html_string += info_list;
-          } else {
-              html_string += "无";
-          }
-          infoDiv.innerHTML = html_string;
-      })
-      .catch(error => console.error('Error:', error));
+function getTaskSataus() {
+    fetch("/setting/get_task_status") // 替换为你的后端接口的路径
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.text();
+        })
+        .then(data => {
+            const taskStatusElement = document.getElementById('taskStatus');
+            taskStatusElement.textContent = '任务状态：' + data;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
 }
 
-getDaemonPid()
+getTaskSataus()
 
 function modifyMaxActiveDownloads() {
     var nums = document.getElementById("max-download").value;

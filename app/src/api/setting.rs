@@ -74,3 +74,19 @@ pub async fn change_task_interval_handler(
     run_handle.await.unwrap();
     Ok(HttpResponse::Ok().body("ok"))
 }
+
+#[get("/get_task_status")]
+pub async fn get_task_status_handler(
+    status: web::Data<Arc<TokioRwLock<bool>>>,
+) -> Result<HttpResponse, Error>{
+    Ok( match do_anime_task::get_task_status(&status).await {
+        Ok(task_status) => {
+            if task_status {
+                HttpResponse::Ok().body("Task Running")
+            }else {
+                HttpResponse::Ok().body("Task is not Running")
+            }
+        }
+        Err(_) => HttpResponse::from(HttpResponse::InternalServerError())
+    })
+}

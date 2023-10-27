@@ -7,3 +7,14 @@
 .anime-button {
     display: none;
 }
+.container {
+    line-height: 1.5;
+}
+
+.form-row {
+    margin-bottom: 10px;
+}
+
+.button-row {
+    margin-top: 20px;
+}

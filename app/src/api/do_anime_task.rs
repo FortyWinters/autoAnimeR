@@ -312,6 +312,16 @@ pub async fn change_task_interval (
     }
 }
 
+#[allow(dead_code)]
+pub async fn get_task_status(
+    status: &Arc<TokioRwLock<bool>>
+) -> Result<bool, Error> {
+    let reader = status.read().await;
+    let val = *reader;
+    drop(reader);
+    Ok(val)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
