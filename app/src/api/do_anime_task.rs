@@ -111,7 +111,6 @@ pub async fn create_anime_task_by_seed (
     } 
 }
 
-
 #[allow(dead_code)]
 pub async fn filter_and_download (
     mikan: &Mikan,
@@ -122,7 +121,9 @@ pub async fn filter_and_download (
 ) -> Result<(), Error> {
         
     // 过滤出新种子
-    let new_anime_seed_vec = anime_filter::filter_anime_bulk(anime_seed_vec, anime_task_set).await.unwrap();
+    // let new_anime_seed_vec = anime_filter::filter_anime_bulk(anime_seed_vec, anime_task_set).await.unwrap();
+    let new_anime_seed_vec = anime_filter::filter_anime_bulk_with_anime_filter(db_connection, anime_seed_vec, anime_task_set, ).await.unwrap();
+    
     println!("new_anime_seed_vec: {:?}", new_anime_seed_vec);
 
     // 下载种子
@@ -206,7 +207,6 @@ pub async fn create_qb_task(
     Ok(())
 }
 
-// update_qb_task_status
 #[allow(dead_code)]
 pub async fn update_qb_task_status(
     qb_task_executor: &QbitTaskExecutor,
