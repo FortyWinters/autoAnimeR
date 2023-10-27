@@ -291,7 +291,7 @@ pub async fn change_task_interval (
     qb_task_executor: &QbitTaskExecutor,
     db_connection: & mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) {
-    let interval = interval as u64 * 60 ;
+    let interval_sec = interval as u64 * 60 ;
     {
         let mut writer = status.write().await;
         *writer = true;
@@ -305,7 +305,7 @@ pub async fn change_task_interval (
         if val {
             log::info!("Running scheduled task with interval: {} min", interval);
             run(qb_task_executor, db_connection).await;
-            time::sleep(Duration::from_secs(interval)).await;
+            time::sleep(Duration::from_secs(interval_sec)).await;
         } else {
             break;
         }
