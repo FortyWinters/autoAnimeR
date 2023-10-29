@@ -232,7 +232,7 @@ impl QbitTaskExecutor {
         let completed_torrent_response = self.qbt_client
             .post(torrent_info_endpoint)
             .header("Cookie", &self.cookie)
-            .query(&[("filter", "completed")])
+            .form(&[("filter", "completed")])
             .send()
             .await?;
 
@@ -395,5 +395,18 @@ mod test {
             };
         
         qb_task_executor.qb_api_add_torrent(&anime_name, &anime_seed_info).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_qb_api() {
+        let qb_task_executor = QbitTaskExecutor::new_with_login(
+            "admin".to_string(), 
+            "adminadmin".to_string())
+            .await
+            .unwrap();
+    
+        
+        let r = qb_task_executor.qb_api_completed_torrent_list().await.unwrap();
+        println!("{:?}", r.len())
     }
 }
