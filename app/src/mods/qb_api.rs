@@ -9,6 +9,7 @@ use crate::models::anime_seed::AnimeSeed;
 pub struct QbitTaskExecutor {
     pub qbt_client: reqwest::Client,
     pub cookie: String,
+    pub host: String
 }
 
 #[allow(dead_code)]
@@ -16,11 +17,13 @@ impl QbitTaskExecutor {
     pub async fn new_with_login(username: String, password: String) -> Result<Self, Error>
     {
         let qbt_client = reqwest::Client::new();
-        let login_endpoint = "http://172.172.0.2:8081/api/v2/auth/login";
+        // let host = "http://172.172.0.2:8081/".to_string();
+        let host = "http://127.0.0.1:8081/".to_string();
+        let login_endpoint = host.clone() + "api/v2/auth/login";
 
         let resp = qbt_client
             .post(login_endpoint)
-            .header("Referer", "http://172.172.0.2:8081")
+            .header("Referer", &host)
             .form(&[
                 ("username", username),
                 ("password", password),
@@ -34,6 +37,7 @@ impl QbitTaskExecutor {
                     Ok(Self {
                         qbt_client,
                         cookie: format!("{}={}", cookie.name(), cookie.value()), 
+                        host
                     })
                 }
                 None => panic!("without cookies found"),
@@ -45,20 +49,20 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_version(&self) -> Result<(), Error> {
-        let webapiversion_endpoint = "http://172.172.0.2:8081/api/v2/app/webapiVersion";
+        let webapiversion_endpoint = self.host.clone() + "api/v2/app/webapiVersion";
         let info_response = self.qbt_client
             .get(webapiversion_endpoint)
             .header("Cookie", &self.cookie)
             .send()
             .await?;
 
-        println!("Response Status: {}", info_response.status());
-        println!("Response Body:\n{}", info_response.text().await?);
+        log::info!("Response Status: {}", info_response.status());
+        log::info!("Response Body:\n{}", info_response.text().await?);
         Ok(())
     }
 
     pub async fn qb_api_torrent_info(&self, torrent_name: String) -> Result<TorrentInfo, Error> {
-        let torrent_info_endpoint = "http://172.172.0.2:8081/api/v2/torrents/info";
+        let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
         let hashes = torrent_name
             .split('.')
             .next()
@@ -84,7 +88,7 @@ impl QbitTaskExecutor {
         anime_name: &String, 
         anime_seed_info: &AnimeSeed)
      -> Result<(), Error> {
-        let add_endpoint = "http://172.172.0.2:8081/api/v2/torrents/add";
+        let add_endpoint = self.host.clone() + "api/v2/torrents/add";
         let file_name = anime_seed_info.seed_url
             .rsplit('/')
             .next()
@@ -104,14 +108,14 @@ impl QbitTaskExecutor {
             .send()
             .await?;
 
-        println!("Response Status: {}", add_response.status());
-        println!("Response Body:\n{}", add_response.text().await?);
+        log::info!("Response Status: {}", add_response.status());
+        log::info!("Response Body:\n{}", add_response.text().await?);
         
         Ok(())
     }
     
     pub async fn qb_api_del_torrent(&self, torrent_name: String) -> Result<(), Error> {
-        let delete_endpoint = "http://172.172.0.2:8081/api/v2/torrents/delete";
+        let delete_endpoint = self.host.clone() + "api/v2/torrents/delete";
         let hashes = torrent_name
             .split('.')
             .next()
@@ -128,8 +132,8 @@ impl QbitTaskExecutor {
             .send()
             .await?;
 
-        println!("Response Status: {}", delete_response.status());
-        println!("Response Body:\n{}", delete_response.text().await?);   
+        log::info!("Response Status: {}", delete_response.status());
+        log::info!("Response Body:\n{}", delete_response.text().await?);   
 
         Ok(())
     }
@@ -140,7 +144,7 @@ impl QbitTaskExecutor {
         subgroup_name: &String, 
         anime_seed_info: &AnimeSeed
     ) -> Result<(), Error> {
-        let rename_file_endpoint = "http://172.172.0.2:8081/api/v2/torrents/renameFile";
+        let rename_file_endpoint = self.host.clone() + "api/v2/torrents/renameFile";
         let torrent_name = anime_seed_info.seed_url
             .rsplit('/')
             .next()
@@ -177,15 +181,14 @@ impl QbitTaskExecutor {
                 )])
             .send()
             .await?;
-
-        println!("Response Status: {}", torrent_info_response.status());
-        println!("Response Body:\n{}", torrent_info_response.text().await?);
+        log::info!("Response Status: {}", torrent_info_response.status());
+        log::info!("Response Body:\n{}", torrent_info_response.text().await?);
         Ok(())
     }
 
 
     pub async fn qb_api_resume_torrent(&self, torrent_name: String) -> Result<(), Error> {
-        let resume_endpoint = "http://172.172.0.2:8081/api/v2/torrents/resume";
+        let resume_endpoint = self.host.clone() + "api/v2/torrents/resume";
         let hashes = torrent_name
             .split('.')
             .next()
@@ -199,14 +202,13 @@ impl QbitTaskExecutor {
             .send()
             .await?;
 
-        println!("Response Status: {}", resume_response.status());
-        println!("Response Body:\n{}", resume_response.text().await?);
-
+        log::info!("Response Status: {}", resume_response.status());
+        log::info!("Response Body:\n{}", resume_response.text().await?);
         Ok(())
     }
 
     pub async fn qb_api_pause_torrent(&self, torrent_name: String) -> Result<(), Error> {
-        let pause_endpoint = "http://172.172.0.2:8081/api/v2/torrents/pause";
+        let pause_endpoint = self.host.clone() + "api/v2/torrents/pause";
         let hashes = torrent_name
             .split('.')
             .next()
@@ -220,14 +222,14 @@ impl QbitTaskExecutor {
             .send()
             .await?;
 
-        println!("Response Status: {}", pause_response.status());
-        println!("Response Body:\n{}", pause_response.text().await?);
+        log::info!("Response Status: {}", pause_response.status());
+        log::info!("Response Body:\n{}", pause_response.text().await?);
 
         Ok(())
     }
 
     pub async fn qb_api_completed_torrent_list(&self) -> Result<Vec<String>, Error> {
-        let torrent_info_endpoint = "http://172.172.0.2:8081/api/v2/torrents/info";
+        let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
 
         let completed_torrent_response = self.qbt_client
             .post(torrent_info_endpoint)
@@ -304,7 +306,7 @@ impl TorrentInfo {
         let d = UNIX_EPOCH + Duration::from_secs(item_eta as u64);
         let datetime = DateTime::<chrono::Utc>::from(d);
         let eta: String = datetime
-                            .format("%Y-%m-%d %H:%M:%S.%f")
+                            .format("%H:%M:%S")
                             .to_string();
         
         Ok( TorrentInfo {
@@ -314,11 +316,10 @@ impl TorrentInfo {
                     .unwrap()
                     .to_owned(),
                 size,
-                done: (item["progress"]
+                done: format!("{:.2} %", (item["progress"]
                     .as_f64()
                     .ok_or("Field not found")
-                    .unwrap() * 100.0)
-                    .to_string() + "%",
+                    .unwrap() * 100.0)),
                 peers: item["num_leechs"]
                     .as_i64()
                     .ok_or("Field not found")

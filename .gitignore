@@ -23,4 +23,7 @@ diesel.toml
 *.torrent
 
 *.log
+
 .DS_Store
+
+var
