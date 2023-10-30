@@ -16,11 +16,11 @@ impl QbitTaskExecutor {
     pub async fn new_with_login(username: String, password: String) -> Result<Self, Error>
     {
         let qbt_client = reqwest::Client::new();
-        let login_endpoint = "http://127.0.0.1:8081/api/v2/auth/login";
+        let login_endpoint = "http://172.172.0.2:8081/api/v2/auth/login";
 
         let resp = qbt_client
             .post(login_endpoint)
-            .header("Referer", "http://127.0.0.1:8081")
+            .header("Referer", "http://172.172.0.2:8081")
             .form(&[
                 ("username", username),
                 ("password", password),
@@ -45,7 +45,7 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_version(&self) -> Result<(), Error> {
-        let webapiversion_endpoint = "http://127.0.0.1:8081/api/v2/app/webapiVersion";
+        let webapiversion_endpoint = "http://172.172.0.2:8081/api/v2/app/webapiVersion";
         let info_response = self.qbt_client
             .get(webapiversion_endpoint)
             .header("Cookie", &self.cookie)
@@ -58,7 +58,7 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_torrent_info(&self, torrent_name: String) -> Result<TorrentInfo, Error> {
-        let torrent_info_endpoint = "http://127.0.0.1:8081/api/v2/torrents/info";
+        let torrent_info_endpoint = "http://172.172.0.2:8081/api/v2/torrents/info";
         let hashes = torrent_name
             .split('.')
             .next()
@@ -84,7 +84,7 @@ impl QbitTaskExecutor {
         anime_name: &String, 
         anime_seed_info: &AnimeSeed)
      -> Result<(), Error> {
-        let add_endpoint = "http://127.0.0.1:8081/api/v2/torrents/add";
+        let add_endpoint = "http://172.172.0.2:8081/api/v2/torrents/add";
         let file_name = anime_seed_info.seed_url
             .rsplit('/')
             .next()
@@ -111,7 +111,7 @@ impl QbitTaskExecutor {
     }
     
     pub async fn qb_api_del_torrent(&self, torrent_name: String) -> Result<(), Error> {
-        let delete_endpoint = "http://127.0.0.1:8081/api/v2/torrents/delete";
+        let delete_endpoint = "http://172.172.0.2:8081/api/v2/torrents/delete";
         let hashes = torrent_name
             .split('.')
             .next()
@@ -140,7 +140,7 @@ impl QbitTaskExecutor {
         subgroup_name: &String, 
         anime_seed_info: &AnimeSeed
     ) -> Result<(), Error> {
-        let rename_file_endpoint = "http://127.0.0.1:8081/api/v2/torrents/renameFile";
+        let rename_file_endpoint = "http://172.172.0.2:8081/api/v2/torrents/renameFile";
         let torrent_name = anime_seed_info.seed_url
             .rsplit('/')
             .next()
@@ -185,7 +185,7 @@ impl QbitTaskExecutor {
 
 
     pub async fn qb_api_resume_torrent(&self, torrent_name: String) -> Result<(), Error> {
-        let resume_endpoint = "http://127.0.0.1:8081/api/v2/torrents/resume";
+        let resume_endpoint = "http://172.172.0.2:8081/api/v2/torrents/resume";
         let hashes = torrent_name
             .split('.')
             .next()
@@ -206,7 +206,7 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_pause_torrent(&self, torrent_name: String) -> Result<(), Error> {
-        let pause_endpoint = "http://127.0.0.1:8081/api/v2/torrents/pause";
+        let pause_endpoint = "http://172.172.0.2:8081/api/v2/torrents/pause";
         let hashes = torrent_name
             .split('.')
             .next()
@@ -227,7 +227,7 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_completed_torrent_list(&self) -> Result<Vec<String>, Error> {
-        let torrent_info_endpoint = "http://127.0.0.1:8081/api/v2/torrents/info";
+        let torrent_info_endpoint = "http://172.172.0.2:8081/api/v2/torrents/info";
 
         let completed_torrent_response = self.qbt_client
             .post(torrent_info_endpoint)

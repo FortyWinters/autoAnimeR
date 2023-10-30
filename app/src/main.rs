@@ -33,7 +33,14 @@ async fn main() -> std::io::Result<()> {
         .build(ConnectionManager::<SqliteConnection>::new(database_url))
         .expect("Failed to create pool.");
 
-    let tera = Tera::new("templates/**/*").expect("Failed to load templates");
+    let tera = Tera::new("templates/**/*.html").expect("Failed to load templates");
+    
+    // let mut tera: Tera = Tera::default();
+    // match tera.add_raw_templates("templates/**/*") {
+    //     Ok(_) => println!("ok"),
+    //     Err(e) => panic!("error") 
+    // }
+
 
     let qb = QbitTaskExecutor::new_with_login(
         "admin".to_string(),
