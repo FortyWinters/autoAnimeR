@@ -98,7 +98,7 @@ pub async fn delete_anime_task_by_mikan_id(
 #[allow(dead_code)]
 pub async fn delete_anime_task_by_torrent_name(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    item: String // torrent_name
+    item: &String // torrent_name
 ) -> Result<(), diesel::result::Error> {
     let _r = delete(anime_task.filter(torrent_name.like(&item)))
         .execute(db_connection)

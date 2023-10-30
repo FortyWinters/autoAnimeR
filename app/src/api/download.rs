@@ -77,7 +77,7 @@ pub async fn get_qb_download_progress(
     let task_list = dao::anime_task::get_by_qbtaskstatus(db_connection, 0).await.unwrap();
     let anime_map = get_anime_id_name_map(db_connection).await.unwrap();
     for t in task_list {
-        let torrent_info = qb.qb_api_torrent_info(t.torrent_name.clone()).await.unwrap();
+        let torrent_info = qb.qb_api_torrent_info(&t.torrent_name).await.unwrap();
         task_qb_info_list.push(TaskQbInfo { 
             mikan_id     : t.mikan_id,
             anime_name   : anime_map.get(&t.mikan_id).unwrap().to_string(), 
@@ -120,17 +120,16 @@ pub async fn qb_execute(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     qb: web::Data<QbitTaskExecutor>
 ) -> Result<(), Error> {
-    let torrent_name = item.torrent_name.clone();
     match item.execute_type {
         // delete
         1 => { 
-            qb.qb_api_del_torrent(torrent_name.clone()).await.unwrap();
-            dao::anime_task::delete_anime_task_by_torrent_name(db_connection, torrent_name).await.unwrap();
+            qb.qb_api_del_torrent(&item.torrent_name).await.unwrap();
+            dao::anime_task::delete_anime_task_by_torrent_name(db_connection, &item.torrent_name).await.unwrap();
         },
         // pause
-        2 => qb.qb_api_pause_torrent(torrent_name).await.unwrap(),
+        2 => qb.qb_api_pause_torrent(&item.torrent_name).await.unwrap(),
         // resume
-        _ => qb.qb_api_resume_torrent(torrent_name).await.unwrap(),
+        _ => qb.qb_api_resume_torrent(&item.torrent_name).await.unwrap(),
     }
     Ok(())
 }

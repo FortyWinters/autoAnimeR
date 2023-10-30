@@ -61,7 +61,7 @@ impl QbitTaskExecutor {
         Ok(())
     }
 
-    pub async fn qb_api_torrent_info(&self, torrent_name: String) -> Result<TorrentInfo, Error> {
+    pub async fn qb_api_torrent_info(&self, torrent_name: &String) -> Result<TorrentInfo, Error> {
         let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
         let hashes = torrent_name
             .split('.')
@@ -114,7 +114,7 @@ impl QbitTaskExecutor {
         Ok(())
     }
     
-    pub async fn qb_api_del_torrent(&self, torrent_name: String) -> Result<(), Error> {
+    pub async fn qb_api_del_torrent(&self, torrent_name: &String) -> Result<(), Error> {
         let delete_endpoint = self.host.clone() + "api/v2/torrents/delete";
         let hashes = torrent_name
             .split('.')
@@ -155,7 +155,7 @@ impl QbitTaskExecutor {
             .next()
             .unwrap()
             .to_owned();
-        let file_name = self.qb_api_torrent_info(torrent_name)
+        let file_name = self.qb_api_torrent_info(&torrent_name)
             .await
             .unwrap()
             .name;
@@ -187,7 +187,7 @@ impl QbitTaskExecutor {
     }
 
 
-    pub async fn qb_api_resume_torrent(&self, torrent_name: String) -> Result<(), Error> {
+    pub async fn qb_api_resume_torrent(&self, torrent_name: &String) -> Result<(), Error> {
         let resume_endpoint = self.host.clone() + "api/v2/torrents/resume";
         let hashes = torrent_name
             .split('.')
@@ -207,7 +207,7 @@ impl QbitTaskExecutor {
         Ok(())
     }
 
-    pub async fn qb_api_pause_torrent(&self, torrent_name: String) -> Result<(), Error> {
+    pub async fn qb_api_pause_torrent(&self, torrent_name: &String) -> Result<(), Error> {
         let pause_endpoint = self.host.clone() + "api/v2/torrents/pause";
         let hashes = torrent_name
             .split('.')
@@ -371,7 +371,7 @@ mod test {
             .await
             .unwrap();
 
-        let r = qb_task_executor.qb_api_torrent_info(torrent_name).await.unwrap();
+        let r = qb_task_executor.qb_api_torrent_info(&torrent_name).await.unwrap();
         println!("{}", r.state);
     }
 
