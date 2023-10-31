@@ -72,7 +72,7 @@ impl QbitTaskExecutor {
         let torrent_info_response = self.qbt_client
             .post(torrent_info_endpoint)
             .header("Cookie", &self.cookie)
-            .query(&[("hashes", &hashes)])
+            .form(&[("hashes", &hashes)])
             .send()
             .await?;
 

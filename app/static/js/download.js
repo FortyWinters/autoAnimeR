@@ -55,7 +55,7 @@ getTorrentInfo()
 
 function handleQbTask(torrentName, executeType) {
     const data = {
-        torrnet_name: torrentName,
+        torrent_name: torrentName,
         execute_type: executeType
     }
     fetch("/download/qb_execute", {

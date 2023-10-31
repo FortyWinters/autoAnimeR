@@ -27,3 +27,5 @@ diesel.toml
 .DS_Store
 
 var
+
+downloads
