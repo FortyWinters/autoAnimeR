@@ -27,6 +27,7 @@ pub fn setting_routes(cfg: &mut web::ServiceConfig) {
             .service(start_schedule_task_handler)
             .service(change_task_interval_handler)
             .service(get_task_status_handler)
+            .service(reload_task_handler)
     );
 }
 

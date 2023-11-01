@@ -112,7 +112,7 @@ function getMaxActiveDownloads() {
 }
 
 function syncAnime() {
-    fetch('/setting/load_fin_task', {method: 'GET'})
+    fetch('/setting/reload_task', {method: 'GET'})
     .then(response => response.json())
     .then(data => {
         console.log(data)

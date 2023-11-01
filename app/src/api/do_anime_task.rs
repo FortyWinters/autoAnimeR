@@ -112,6 +112,39 @@ pub async fn create_anime_task_by_seed (
 }
 
 #[allow(dead_code)]
+pub async fn create_anime_task_from_exist_files(
+    db_connection: & mut PooledConnection<ConnectionManager<SqliteConnection>>
+) -> Result<(), Error> {
+    let files = std::fs::read_dir("downloads")?;
+    for file in files {
+        let file = file?;
+        if file.file_name().to_string_lossy().to_string() == "seed" {
+            continue;
+        }
+        for each_episode_file in file.path().read_dir()? {
+            let each_episode = each_episode_file?.file_name().to_string_lossy().to_string();
+            let parts: Vec<&str> = each_episode.split(" - ").collect();
+
+            if let Ok(mikan_id) = dao::anime_list::get_mikanid_by_anime_name(&parts[0].to_string(), db_connection).await {
+                let anime_task = AnimeTaskJson {
+                    mikan_id,
+                    episode        : parts[1].parse::<i32>().unwrap(),
+                    torrent_name   : "unknow".to_string(),
+                    qb_task_status : 1
+                };
+                dao::anime_task::add(db_connection, &anime_task).await.unwrap();
+                log::info!("add new anime task to db, anime_task detail: {:?}", anime_task);
+            }
+            else {
+                log::error!("get mikan_id failed, anime_name: {}, episode: {}", parts[0], parts[1]);
+                continue;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
 pub async fn filter_and_download (
     mikan: &Mikan,
     qb_task_executor: &QbitTaskExecutor,
@@ -357,5 +390,19 @@ mod test {
 
         let _r = create_anime_task_bulk(&mikan, &qb_task_executor, db_connection).await.unwrap();
 
+    }
+
+    #[tokio::test]
+    pub async fn test_create_anime_task_from_exist_files(){
+        dotenv::dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set");
+        let database_pool = Pool::builder()
+            .build(ConnectionManager::<SqliteConnection>::new(database_url))
+            .expect("Failed to create pool.");
+
+        let db_connection = &mut database_pool.get().unwrap();
+
+        let _t = create_anime_task_from_exist_files(db_connection).await.unwrap();
     }
 }

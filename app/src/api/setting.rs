@@ -90,3 +90,14 @@ pub async fn get_task_status_handler(
         Err(_) => HttpResponse::from(HttpResponse::InternalServerError())
     })
 }
+
+#[get("/reload_task")]
+pub async fn reload_task_handler(
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
+    Ok(match do_anime_task::create_anime_task_from_exist_files(db_connection).await {
+        Ok(_) => HttpResponse::Ok().body("ok"),
+        Err(_) => HttpResponse::from(HttpResponse::InternalServerError())
+    })
+}

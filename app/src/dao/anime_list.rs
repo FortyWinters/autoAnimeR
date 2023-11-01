@@ -113,6 +113,15 @@ pub async fn del_by_mikan_id(
     Ok(result)
 }
 
+#[allow(dead_code)]
+pub async fn get_mikanid_by_anime_name(
+    query_anime_name: &String,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>
+) -> Result<i32, diesel::result::Error> {
+    let result = anime_list.filter(anime_name.eq(query_anime_name)).first::<AnimeList>(db_connection)?;
+    Ok(result.mikan_id)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
