@@ -1,8 +1,10 @@
 .start-button {
-    width: 100px;
+    margin-left: 20px;
+    width: 70px;
 }
 .stop-button {
-    width: 100px;
+    margin-left: 20px;
+    width: 70px;
 }
 .anime-button {
     display: none;
@@ -17,4 +19,29 @@
 
 .button-row {
     margin-top: 20px;
+}
+.start_line {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.start_line > * {
+    margin-right: 10px;
+}
+
+.execute_interval_text {
+    display: inline-block; 
+}
+
+.execute_interval {
+    display: inline-block; 
+    width: 70px; 
+    margin-left: 25px;
+}
+.execute_submit {
+    display: inline-block; 
+    margin-left: 10px;
+}
+.task_status {
+    margin-left: 65px;
 }

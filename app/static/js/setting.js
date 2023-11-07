@@ -69,7 +69,7 @@ function getTaskSataus() {
         })
         .then(data => {
             const taskStatusElement = document.getElementById('taskStatus');
-            taskStatusElement.textContent = '任务状态：' + data;
+            taskStatusElement.textContent = data;
         })
         .catch(error => {
             console.error('Error:', error);
