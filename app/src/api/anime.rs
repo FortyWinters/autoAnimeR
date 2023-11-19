@@ -23,6 +23,12 @@ pub struct UpdateAnimeListJson {
     pub season: i32,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EpisodeInfo {
+    pub mikan_id: i32,
+    pub episode_offset: i32
+}
+
 #[post("/update_anime_list")]
 pub async fn update_anime_list_handler(
     item: web::Json<UpdateAnimeListJson>,
@@ -696,4 +702,14 @@ pub async fn create_task_by_episode(
     let mikan = spider::Mikan::new().unwrap();
     do_anime_task::create_anime_task_single(&mikan, &qb, db_connection, item.mikan_id, item.episode).await.unwrap();
     Ok(())
+}
+
+#[post("/add_episode_offset_filter_by_mikan_id")]
+pub async fn add_episode_offset_filter_by_mikan_id_handler(
+    item: web::Json<EpisodeInfo>,
+    pool: web::Data<Pool>
+) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool.get().unwrap();
+    dao::anime_filter::add_local_episode_filter_by_mikan_id(item.mikan_id, item.episode_offset, db_connection).await.unwrap();
+    Ok(HttpResponse::Ok().body("ok"))
 }
