@@ -1,39 +1,36 @@
-$(function() {
-    $('button.start-button').on('click', function() {
-        console.log('start')
-        this.disabled = true;
-        this.style.backgroundColor = "#d6d6d6";
+function startAnimeTask() {
+    console.log('start')
+    this.disabled = true;
+    this.style.backgroundColor = "#d6d6d6";
 
-        fetch("/setting/start", {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            console.log(data)
-            this.disabled = false;
-            window.location.reload();
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-
+    fetch("/setting/start", {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {
+        console.log(data)
+        this.disabled = false;
+        window.location.reload();
+    })
+    .catch(error => {
+        console.error('Error:', error);
     });
+}
 
-    $('button.stop-button').on('click', function() {
-        console.log('stop')
-        this.disabled = true;
-        this.style.backgroundColor = "#d6d6d6";
+function stopAnimeTask() {
+    console.log('start')
+    this.disabled = true;
+    this.style.backgroundColor = "#d6d6d6";
 
-        fetch("/setting/exit", {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            console.log(data)
-            this.disabled = false;
-            window.location.reload();
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
+    fetch("/setting/exit", {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {
+        console.log(data)
+        this.disabled = false;
+        window.location.reload();
+    })
+    .catch(error => {
+        console.error('Error:', error);
     });
-})
+}
 
 function submitForm(event) {
     event.preventDefault(); // 阻止表单默认提交行为

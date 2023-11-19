@@ -129,7 +129,7 @@ pub async fn create_anime_task_from_exist_files(
                 let anime_task = AnimeTaskJson {
                     mikan_id,
                     episode        : parts[1].parse::<i32>().unwrap(),
-                    torrent_name   : "unknow".to_string(),
+                    torrent_name   : "unknow - ".to_string() + &each_episode,
                     qb_task_status : 1
                 };
                 dao::anime_task::add(db_connection, &anime_task).await.unwrap();
