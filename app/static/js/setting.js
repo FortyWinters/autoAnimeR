@@ -1,7 +1,6 @@
 function startAnimeTask() {
     console.log('start')
     this.disabled = true;
-    this.style.backgroundColor = "#d6d6d6";
 
     fetch("/setting/start", {method: 'POST'})
     .then(response => response.json())
@@ -18,7 +17,6 @@ function startAnimeTask() {
 function stopAnimeTask() {
     console.log('start')
     this.disabled = true;
-    this.style.backgroundColor = "#d6d6d6";
 
     fetch("/setting/exit", {method: 'POST'})
     .then(response => response.json())

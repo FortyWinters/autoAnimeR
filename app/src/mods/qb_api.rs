@@ -57,7 +57,7 @@ impl QbitTaskExecutor {
             .await?;
 
         log::info!("Response Status: {}", info_response.status());
-        log::info!("Response Body:\n{}", info_response.text().await?);
+        log::info!("Response Body: {}", info_response.text().await?);
         Ok(())
     }
 
@@ -109,7 +109,7 @@ impl QbitTaskExecutor {
             .await?;
 
         log::info!("Response Status: {}", add_response.status());
-        log::info!("Response Body:\n{}", add_response.text().await?);
+        log::info!("Response Body: {}", add_response.text().await?);
         
         Ok(())
     }
@@ -133,7 +133,7 @@ impl QbitTaskExecutor {
             .await?;
 
         log::info!("Response Status: {}", delete_response.status());
-        log::info!("Response Body:\n{}", delete_response.text().await?);   
+        log::info!("Response Body: {}", delete_response.text().await?);   
 
         Ok(())
     }
@@ -182,7 +182,7 @@ impl QbitTaskExecutor {
             .send()
             .await?;
         log::info!("Response Status: {}", torrent_info_response.status());
-        log::info!("Response Body:\n{}", torrent_info_response.text().await?);
+        log::info!("Response Body: {}", torrent_info_response.text().await?);
         Ok(())
     }
 
@@ -203,7 +203,7 @@ impl QbitTaskExecutor {
             .await?;
 
         log::info!("Response Status: {}", resume_response.status());
-        log::info!("Response Body:\n{}", resume_response.text().await?);
+        log::info!("Response Body: {}", resume_response.text().await?);
         Ok(())
     }
 
@@ -223,7 +223,7 @@ impl QbitTaskExecutor {
             .await?;
 
         log::info!("Response Status: {}", pause_response.status());
-        log::info!("Response Body:\n{}", pause_response.text().await?);
+        log::info!("Response Body: {}", pause_response.text().await?);
 
         Ok(())
     }

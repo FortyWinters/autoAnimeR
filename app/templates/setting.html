@@ -21,9 +21,11 @@
     </div>
     
     <div class="start_line">
-        <label for="interval" class="execute_interval_text">执行间隔(min):</label>
-        <input type="text" id="interval" name="interval" class="execute_interval">
-        <input type="submit" value="Submit" class="execute_submit">
+        <form onsubmit="submitForm(event)">
+            <label for="interval" class="execute_interval_text">执行间隔(min):</label>
+            <input type="text" id="interval" name="interval" class="execute_interval">
+            <input type="submit" value="Submit" class="execute_submit">
+        </form>
     </div>
 
     <div class="start_line">
