@@ -99,7 +99,7 @@ impl Mikan {
             }
     
             for n in node.find(Name("span")) {
-                let img_url = n.attr("data-src").unwrap().to_string();
+                let img_url = n.attr("data-src").unwrap().split('?').next().unwrap().to_string();
                 let mikan_id = n.attr("data-bangumiid").unwrap().parse::<i32>().unwrap();
                 anime_list.push(Anime {
                     mikan_id,
@@ -207,6 +207,7 @@ impl Mikan {
 
     pub async fn download_img(&self, img_url: &str, save_path: &str) -> Result<(), Box<dyn Error>> {
         let download_url = format!("{}{}", self.url, img_url);
+        // print!("download url: {}, img_url: {}\n", download_url, img_url);
         let mut parts = img_url.split('/');
         let new_name = parts.nth(4).unwrap();
         self.download(&download_url, save_path, new_name).await
