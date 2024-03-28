@@ -18,6 +18,7 @@ pub async fn download_index_handler(
     qb: web::Data<QbitTaskExecutor>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] download_index");
     Ok(
         match download_index(tera, &qb, db_connection)
             .await {
@@ -51,6 +52,7 @@ pub async fn qb_download_progress_handler(
     qb: web::Data<QbitTaskExecutor>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] qb_download_progress");
     Ok(
         match get_qb_download_progress(db_connection, qb)
             .await {
@@ -106,6 +108,7 @@ pub async fn qb_execute_handler(
     qb: web::Data<QbitTaskExecutor>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] qb_execute, {:?}", item);
     Ok(
         match qb_execute(item, db_connection, qb)
             .await {

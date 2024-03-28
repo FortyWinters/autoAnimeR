@@ -7,6 +7,7 @@ use std::collections::{HashSet, HashMap};
 use diesel::r2d2::{PooledConnection, ConnectionManager};
 use diesel::SqliteConnection;
 use futures::future::join_all;
+use log;
 use crate::Pool;
 use crate::dao;
 use crate::mods::spider::{self, Mikan};
@@ -35,6 +36,7 @@ pub async fn update_anime_list_handler(
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] update_anime_list, {:?}", item);
     Ok(
         match update_anime_list(item, db_connection).await {
             Ok(anime_list) => HttpResponse::Created().json(anime_list),
@@ -109,6 +111,7 @@ pub async fn anime_list_by_broadcast_handler(
     path: web::Path<(String, String)>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] anime_list_by_broadcast, {:?}", path);
     Ok(
         match anime_list_by_broadcast(db_connection, tera, path)
             .await {
@@ -227,6 +230,7 @@ pub async fn subscribe_anime_handler(
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] subscribe_anime, {:?}", item);
     Ok(
         match subscribe_anime(item, db_connection)
             .await {
@@ -255,6 +259,7 @@ pub async fn cancel_subscribe_anime_handler(
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] cancel_subscribe_anime, {:?}", item);
     Ok(
         match cancel_subscribe_anime(item, db_connection)
             .await {
@@ -283,6 +288,7 @@ pub async fn anime_index_handler(
     tera: web::Data<tera::Tera>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] anime_index");
     Ok(
         match anime_index(db_connection, tera)
             .await {
@@ -437,6 +443,7 @@ pub async fn anime_detail_handler(
     path: web::Path<String>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] detail, {:?}", path);
     Ok(
         match anime_detail(&qb, db_connection, tera, path)
             .await {
@@ -594,6 +601,7 @@ pub async fn recover_seed_handler(
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] recover_seed, {:?}", item);
     Ok(
         match recover_seed(item, db_connection)
             .await {
@@ -621,6 +629,7 @@ pub async fn delete_anime_data_handler(
     pool: web::Data<Pool>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] delete_anime_data, {:?}", item);
     Ok(
         match delete_anime_data(item, db_connection)
             .await {
@@ -658,6 +667,7 @@ pub async fn create_task_by_seed_url_handler(
     qb: web::Data<QbitTaskExecutor>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] create_task_by_seed_url, {:?}", item);
     Ok(
         match create_task_by_seed_url(item, db_connection, qb)
             .await {
@@ -685,6 +695,7 @@ pub async fn create_task_by_episode_handler(
     qb: web::Data<QbitTaskExecutor>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
+    log::info!("[API] create_task_by_episode, {:?}", item);
     Ok(
         match create_task_by_episode(item, db_connection, qb)
             .await {
@@ -711,5 +722,6 @@ pub async fn add_episode_offset_filter_by_mikan_id_handler(
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
     dao::anime_filter::add_local_episode_filter_by_mikan_id(item.mikan_id, item.episode_offset, db_connection).await.unwrap();
+    log::info!("[API] add_episode_offset_filter_by_mikan_id, {:?}", item);
     Ok(HttpResponse::Ok().body("ok"))
 }
