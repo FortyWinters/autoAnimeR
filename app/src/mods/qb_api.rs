@@ -242,6 +242,24 @@ impl QbitTaskExecutor {
 
         Ok(torrent_hash_list)
     }
+
+    pub async fn qb_api_get_download_path(&self) -> Result<String, Error> {
+        let app_info_endpoint = self.host.clone() + "api/v2/app/preferences";
+
+        let app_info_response = self
+            .qbt_client
+            .get(app_info_endpoint)
+            .header("Cookie", &self.cookie)
+            .send()
+            .await?;
+
+        log::info!("Qb web api response Status: {}", app_info_response.status());
+        let app_info_response_text = app_info_response.text().await?;
+        let json: serde_json::Value = serde_json::from_str(&app_info_response_text).unwrap();
+        let download_path = json["save_path"].to_string().replace("\"", "");
+        log::info!("download path: {:?}", download_path);
+        Ok(download_path)
+    }
 }
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct TorrentInfo {
@@ -390,6 +408,9 @@ mod test {
             .qb_api_completed_torrent_list()
             .await
             .unwrap();
+
+        let _r = qb_task_executor.qb_api_get_download_path().await.unwrap();
+
         println!("{:?}", r.len())
     }
 }

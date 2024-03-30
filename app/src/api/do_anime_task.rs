@@ -130,11 +130,16 @@ pub async fn create_anime_task_by_seed(
 #[allow(dead_code)]
 pub async fn create_anime_task_from_exist_files(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    qb_task_executor: &QbitTaskExecutor,
 ) -> Result<(), Error> {
-    let files = std::fs::read_dir("downloads")?;
+    let path = qb_task_executor.qb_api_get_download_path().await.unwrap();
+    let files = std::fs::read_dir(path).unwrap();
     for file in files {
         let file = file?;
-        if file.file_name().to_string_lossy().to_string() == "seed" {
+        println!("{:?}", file);
+
+        let filename = file.file_name().to_string_lossy().to_string();
+        if filename == "seed" || filename == ".DS_Store" {
             continue;
         }
         for each_episode_file in file.path().read_dir()? {
@@ -458,8 +463,12 @@ mod test {
             .expect("Failed to create pool.");
 
         let db_connection = &mut database_pool.get().unwrap();
+        let qb_task_executor =
+            QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
+                .await
+                .unwrap();
 
-        let _t = create_anime_task_from_exist_files(db_connection)
+        let _t = create_anime_task_from_exist_files(db_connection, &qb_task_executor)
             .await
             .unwrap();
     }
