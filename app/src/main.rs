@@ -1,20 +1,21 @@
-use routers::*;
-use actix_web::{App, HttpServer, web};
+use actix_files::Files;
+use actix_web::{web, App, HttpServer};
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
-use tera::Tera;
-use actix_files::Files;
 use mods::qb_api::QbitTaskExecutor;
+use routers::*;
+use tera::Tera;
 
+mod api;
+mod dao;
+mod error;
+mod models;
+mod mods;
 mod routers;
 mod schema;
-mod api;
-mod models;
-mod dao;
-mod mods;
+use log4rs;
 use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
-use log4rs;
 
 #[macro_use]
 extern crate diesel;
@@ -27,24 +28,20 @@ async fn main() -> std::io::Result<()> {
 
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
 
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let database_pool = Pool::builder()
         .build(ConnectionManager::<SqliteConnection>::new(database_url))
         .expect("Failed to create pool.");
 
     let tera = Tera::new("templates/**/*.html").expect("Failed to load templates");
-    
+
     // let mut tera: Tera = Tera::default();
     // match tera.add_raw_templates("templates/**/*") {
     //     Ok(_) => println!("ok"),
-    //     Err(e) => panic!("error") 
+    //     Err(e) => panic!("error")
     // }
 
-
-    let qb = QbitTaskExecutor::new_with_login(
-        "admin".to_string(),
-        "adminadmin".to_string())
+    let qb = QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
         .await
         .expect("Failed to create qb client");
 

@@ -1,13 +1,10 @@
 use crate::models::anime_seed::AnimeSeed;
+use crate::error::error::AnimeError;
 use chrono::DateTime;
-use reqwest::{
-    multipart::{Form, Part},
-    Error,
-};
+use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::time::{Duration, UNIX_EPOCH};
-
 #[derive(Debug, Clone)]
 pub struct QbitTaskExecutor {
     pub qbt_client: reqwest::Client,
@@ -17,71 +14,94 @@ pub struct QbitTaskExecutor {
 
 #[allow(dead_code)]
 impl QbitTaskExecutor {
-    pub async fn new_with_login(username: String, password: String) -> Result<Self, Error> {
+    pub async fn new_with_login(username: String, password: String) -> Result<Self, AnimeError> {
         let qbt_client = reqwest::Client::new();
-        // let host = "http://172.172.0.2:8081/".to_string();
         let host = "http://127.0.0.1:8081/".to_string();
         let login_endpoint = host.clone() + "api/v2/auth/login";
 
-        let resp = qbt_client
+        if let Ok(resp) = qbt_client
             .post(login_endpoint)
             .header("Referer", &host)
             .form(&[("username", username), ("password", password)])
             .send()
-            .await?;
-
-        if resp.status().is_success() {
-            match resp.cookies().next() {
-                Some(cookie) => Ok(Self {
-                    qbt_client,
-                    cookie: format!("{}={}", cookie.name(), cookie.value()),
-                    host,
-                }),
-                None => panic!("without cookies found"),
+            .await
+        {
+            if resp.status().is_success() {
+                match resp.cookies().next() {
+                    Some(cookie) => Ok(Self {
+                        qbt_client,
+                        cookie: format!("{}={}", cookie.name(), cookie.value()),
+                        host,
+                    }),
+                    None => panic!("[QB API] Login error, without cookies found"),
+                }
+            } else {
+                panic!("[QB API] Login error, response status is {}", resp.status());
             }
         } else {
-            panic!("status is not success");
+            panic!("[QB API] Login error, qbittorrent client error");
         }
     }
 
-    pub async fn qb_api_version(&self) -> Result<(), Error> {
+    pub async fn qb_api_version(&self) -> Result<(), AnimeError> {
         let webapiversion_endpoint = self.host.clone() + "api/v2/app/webapiVersion";
-        let info_response = self
+        if let Ok(info_response) = self
             .qbt_client
-            .get(webapiversion_endpoint)
+            .get(webapiversion_endpoint.clone())
             .header("Cookie", &self.cookie)
             .send()
-            .await?;
-
-        log::info!("Response Status: {}", info_response.status());
-        log::info!("Response Body: {}", info_response.text().await?);
+            .await
+        {
+            log::info!(
+                "[QB API] qb_api_version: {}",
+                info_response.text().await.unwrap()
+            );
+        } else {
+            log::info!(
+                "[QB API] Unable to access qb web api: {}",
+                webapiversion_endpoint
+            );
+        }
         Ok(())
     }
 
-    pub async fn qb_api_torrent_info(&self, torrent_name: &String) -> Result<TorrentInfo, Error> {
+    pub async fn qb_api_torrent_info(
+        &self,
+        torrent_name: &String,
+    ) -> Result<TorrentInfo, AnimeError> {
         let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
         let hashes = torrent_name.split('.').next().unwrap().to_owned();
 
-        let torrent_info_response = self
+        if let Ok(torrent_info_response) = self
             .qbt_client
-            .post(torrent_info_endpoint)
+            .post(torrent_info_endpoint.clone())
             .header("Cookie", &self.cookie)
             .form(&[("hashes", &hashes)])
             .send()
-            .await?;
-
-        let torrent_info_response_text = torrent_info_response.text().await?;
-        let json: serde_json::Value = serde_json::from_str(&torrent_info_response_text).unwrap();
-        let torrent_info = TorrentInfo::new(&json[0])?;
-
-        Ok(torrent_info)
+            .await
+        {
+            let torrent_info_response_text = torrent_info_response.text().await.unwrap();
+            let json: serde_json::Value =
+                serde_json::from_str(&torrent_info_response_text).unwrap();
+            let torrent_info = TorrentInfo::new(&json[0]).unwrap();
+            Ok(torrent_info)
+        } else {
+            log::info!(
+                "[QB API] Unable to access qb web api: {}",
+                torrent_info_endpoint
+            );
+            Err(AnimeError::new(format!(
+                "[QB API] Unable to access qb web api: {}",
+                torrent_info_endpoint,
+            )))
+        }
     }
 
     pub async fn qb_api_add_torrent(
         &self,
         anime_name: &String,
         anime_seed_info: &AnimeSeed,
-    ) -> Result<(), Error> {
+    ) -> Result<(), AnimeError> {
         let add_endpoint = self.host.clone() + "api/v2/torrents/add";
         let file_name = anime_seed_info
             .seed_url
@@ -96,35 +116,37 @@ impl QbitTaskExecutor {
             .part("torrent", Part::bytes(file_byte).file_name(file_name))
             .text("savepath", anime_name.clone());
 
-        let add_response = self
+        if let Ok(_) = self
             .qbt_client
-            .post(add_endpoint)
+            .post(add_endpoint.clone())
             .header("Cookie", &self.cookie)
             .multipart(form)
             .send()
-            .await?;
-
-        log::info!("Response Status: {}", add_response.status());
-        log::info!("Response Body: {}", add_response.text().await?);
-
+            .await
+        {
+            log::info!("[QB API] Successfully added seeds: {:?}", anime_seed_info);
+        } else {
+            log::info!("[QB API] Unable to access qb web api: {}", add_endpoint);
+        }
         Ok(())
     }
 
-    pub async fn qb_api_del_torrent(&self, torrent_name: &String) -> Result<(), Error> {
+    pub async fn qb_api_del_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
         let delete_endpoint = self.host.clone() + "api/v2/torrents/delete";
         let hashes = torrent_name.split('.').next().unwrap().to_owned();
 
-        let delete_response = self
+        if let Ok(_) = self
             .qbt_client
-            .post(delete_endpoint)
+            .post(delete_endpoint.clone())
             .header("Cookie", &self.cookie)
             .form(&[("hashes", hashes), ("deleteFiles", String::from("false"))])
             .send()
-            .await?;
-
-        log::info!("Response Status: {}", delete_response.status());
-        log::info!("Response Body: {}", delete_response.text().await?);
-
+            .await
+        {
+            log::info!("[QB API] Successfully delete seeds: {}", torrent_name);
+        } else {
+            log::info!("[QB API] Unable to access qb web api: {}", delete_endpoint);
+        }
         Ok(())
     }
 
@@ -133,7 +155,7 @@ impl QbitTaskExecutor {
         anime_name: &String,
         subgroup_name: &String,
         anime_seed_info: &AnimeSeed,
-    ) -> Result<(), Error> {
+    ) -> Result<(), AnimeError> {
         let rename_file_endpoint = self.host.clone() + "api/v2/torrents/renameFile";
         let torrent_name = anime_seed_info
             .seed_url
@@ -148,116 +170,141 @@ impl QbitTaskExecutor {
             None => "mp4",
         };
 
-        let torrent_info_response = self
+        let new_name = format!(
+            "{}{}{}{}{}{}{}",
+            anime_name, " - ", anime_seed_info.episode, " - ", subgroup_name, ".", extension
+        );
+
+        if let Ok(torrent_info_response) = self
             .qbt_client
-            .post(rename_file_endpoint)
+            .post(rename_file_endpoint.clone())
             .header("Cookie", &self.cookie)
             .form(&[
                 ("hash", hashes),
-                ("oldPath", format!("{}", file_name.to_string())),
-                (
-                    "newPath",
-                    format!(
-                        "{}{}{}{}{}{}{}",
-                        anime_name,
-                        " - ",
-                        anime_seed_info.episode,
-                        " - ",
-                        subgroup_name,
-                        ".",
-                        extension
-                    ),
-                ),
+                ("oldPath", file_name.to_string()),
+                ("newPath", new_name.clone()),
             ])
             .send()
-            .await?;
-        log::info!("Response Status: {}", torrent_info_response.status());
-        log::info!("Response Body: {}", torrent_info_response.text().await?);
+            .await
+        {
+            if torrent_info_response.status().is_success() {
+                log::info!(
+                    "[QB API] Successfully rename seeds: {} with new name: {}",
+                    file_name,
+                    new_name
+                );
+            } else {
+                log::info!(
+                    "[QB API] Unalble to rename seed: {} with new name: {}, {}",
+                    file_name,
+                    new_name,
+                    torrent_info_response.text().await.unwrap()
+                )
+            }
+        } else {
+            log::info!(
+                "[QB API] Unable to access qb web api: {}",
+                rename_file_endpoint
+            );
+        }
         Ok(())
     }
 
-    pub async fn qb_api_resume_torrent(&self, torrent_name: &String) -> Result<(), Error> {
+    pub async fn qb_api_resume_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
         let resume_endpoint = self.host.clone() + "api/v2/torrents/resume";
         let hashes = torrent_name.split('.').next().unwrap().to_owned();
 
-        let resume_response = self
+        if let Ok(_) = self
             .qbt_client
-            .post(resume_endpoint)
+            .post(resume_endpoint.clone())
             .header("Cookie", &self.cookie)
             .form(&[("hashes", hashes)])
             .send()
-            .await?;
-
-        log::info!("Response Status: {}", resume_response.status());
-        log::info!("Response Body: {}", resume_response.text().await?);
+            .await
+        {
+            log::info!("[QB API] Successfully resume seed: {}", torrent_name);
+        } else {
+            log::info!("[QB API] Unable to access qb web api: {}", resume_endpoint);
+        }
         Ok(())
     }
 
-    pub async fn qb_api_pause_torrent(&self, torrent_name: &String) -> Result<(), Error> {
+    pub async fn qb_api_pause_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
         let pause_endpoint = self.host.clone() + "api/v2/torrents/pause";
         let hashes = torrent_name.split('.').next().unwrap().to_owned();
 
-        let pause_response = self
+        if let Ok(_) = self
             .qbt_client
-            .post(pause_endpoint)
+            .post(pause_endpoint.clone())
             .header("Cookie", &self.cookie)
             .form(&[("hashes", hashes)])
             .send()
-            .await?;
-
-        log::info!("Response Status: {}", pause_response.status());
-        log::info!("Response Body: {}", pause_response.text().await?);
-
+            .await
+        {
+            log::info!("[QB API] Successfully pause seed: {}", torrent_name);
+        } else {
+            log::info!("[QB API] Unable to access qb web api: {}", pause_endpoint);
+        }
         Ok(())
     }
 
-    pub async fn qb_api_completed_torrent_list(&self) -> Result<Vec<String>, Error> {
+    pub async fn qb_api_completed_torrent_list(&self) -> Result<Vec<String>, AnimeError> {
         let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
+        let mut torrent_hash_list: Vec<String> = Vec::new();
 
-        let completed_torrent_response = self
+        if let Ok(completed_torrent_response) = self
             .qbt_client
-            .post(torrent_info_endpoint)
+            .post(torrent_info_endpoint.clone())
             .header("Cookie", &self.cookie)
             .form(&[("filter", "completed")])
             .send()
-            .await?;
+            .await
+        {
+            let completed_torrent_response_text = completed_torrent_response.text().await.unwrap();
+            let json: serde_json::Value =
+                serde_json::from_str(&completed_torrent_response_text).unwrap();
 
-        let completed_torrent_response_text = completed_torrent_response.text().await?;
-        let json: serde_json::Value =
-            serde_json::from_str(&completed_torrent_response_text).unwrap();
-        let mut torrent_hash_list: Vec<String> = Vec::new();
-
-        if let serde_json::Value::Array(torrents) = json {
-            for torrent in torrents {
-                torrent_hash_list.push(
-                    torrent["hash"]
-                        .as_str()
-                        .ok_or("Field not found")
-                        .unwrap()
-                        .to_string()
-                        + ".torrent",
-                );
+            if let serde_json::Value::Array(torrents) = json {
+                for torrent in torrents {
+                    torrent_hash_list.push(
+                        torrent["hash"]
+                            .as_str()
+                            .ok_or("Field not found")
+                            .unwrap()
+                            .to_string()
+                            + ".torrent",
+                    );
+                }
             }
+        } else {
+            log::info!(
+                "[QB API] Unable to access qb web api: {}",
+                torrent_info_endpoint
+            );
         }
-
         Ok(torrent_hash_list)
     }
 
-    pub async fn qb_api_get_download_path(&self) -> Result<String, Error> {
+    pub async fn qb_api_get_download_path(&self) -> Result<String, AnimeError> {
         let app_info_endpoint = self.host.clone() + "api/v2/app/preferences";
-
-        let app_info_response = self
+        let mut download_path = String::from("");
+        if let Ok(app_info_response) = self
             .qbt_client
-            .get(app_info_endpoint)
+            .get(app_info_endpoint.clone())
             .header("Cookie", &self.cookie)
             .send()
-            .await?;
-
-        log::info!("Qb web api response Status: {}", app_info_response.status());
-        let app_info_response_text = app_info_response.text().await?;
-        let json: serde_json::Value = serde_json::from_str(&app_info_response_text).unwrap();
-        let download_path = json["save_path"].to_string().replace("\"", "");
-        log::info!("download path: {:?}", download_path);
+            .await
+        {
+            let app_info_response_text = app_info_response.text().await.unwrap();
+            let json: serde_json::Value = serde_json::from_str(&app_info_response_text).unwrap();
+            download_path = json["save_path"].to_string().replace("\"", "");
+            log::info!("download path: {:?}", download_path);
+        } else {
+            log::info!(
+                "[QB API] Unable to access qb web api: {}",
+                app_info_endpoint
+            );
+        }
         Ok(download_path)
     }
 }
@@ -275,7 +322,7 @@ pub struct TorrentInfo {
 }
 
 impl TorrentInfo {
-    pub fn new(item: &serde_json::Value) -> Result<Self, Error> {
+    pub fn new(item: &serde_json::Value) -> Result<Self, AnimeError> {
         let item_size = item["size"].as_i64().ok_or("Field not found").unwrap();
 
         const GB: i64 = 1024 * 1024 * 1024;
