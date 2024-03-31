@@ -1,5 +1,6 @@
 use actix_files::Files;
-use actix_web::{web, App, HttpServer};
+use actix_web::{http, web, App, HttpServer};
+use actix_cors::Cors;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
 use mods::qb_api::QbitTaskExecutor;
@@ -48,6 +49,15 @@ async fn main() -> std::io::Result<()> {
     let tastk_status = Arc::new(TokioRwLock::new(false));
 
     HttpServer::new(move || {
+        let cors = Cors::default()
+            .allowed_origin("http://localhost:5173")
+            .allowed_origin("http://localhost:8080")
+            .allowed_methods(vec!["GET", "POST"])
+            .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
+            .allowed_header(http::header::CONTENT_TYPE)
+            .supports_credentials()
+            .max_age(3600);
+
         App::new()
             .app_data(web::Data::new(database_pool.clone()))
             .app_data(web::Data::new(tera.clone()))
@@ -57,6 +67,7 @@ async fn main() -> std::io::Result<()> {
             .configure(anime_routes)
             .configure(setting_routes)
             .configure(download_routes)
+            .wrap(cors)
     })
     .bind(("0.0.0.0", 8080))?
     .run()
