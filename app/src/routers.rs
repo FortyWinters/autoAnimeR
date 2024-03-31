@@ -40,3 +40,21 @@ pub fn download_routes(cfg: &mut web::ServiceConfig) {
             .service(qb_execute_handler)
     );
 }
+
+pub fn anime_routes_v2(cfg: &mut web::ServiceConfig) {
+    use crate::v2::anime::*;
+    cfg.service(
+        web::scope("/v2/anime")
+            .service(home_handler)
+            // .service(update_anime_list_handler)
+            // .service(anime_list_by_broadcast_handler)
+            // .service(subscribe_anime_handler)
+            // .service(cancel_subscribe_anime_handler)
+            // .service(update_anime_seed_handler)
+            // .service(anime_detail_handler)
+            // .service(recover_seed_handler)
+            // .service(delete_anime_data_handler)
+            // .service(create_task_by_seed_url_handler)
+            // .service(create_task_by_episode_handler)
+    );
+}
