@@ -6,46 +6,67 @@ use anyhow::Result;
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::SqliteConnection;
 use log;
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-#[get("/home")]
-pub async fn home_handler(pool: web::Data<Pool>) -> Result<HttpResponse, Error> {
-    let db_connection = &mut pool.get().unwrap();
-    log::info!("[API] anime_index");
-    Ok(match my_anime(db_connection).await {
-        Ok(res) => HttpResponse::Ok().json(res),
-        _ => HttpResponse::from(HttpResponse::InternalServerError()),
-    })
+fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> actix_web::Error {
+    log::error!("{}, error: {:?}", message, e);
+    actix_web::error::ErrorInternalServerError("Internal server error")
 }
 
-pub async fn my_anime(
+#[get("/home")]
+pub async fn get_anime_home_handler(pool: web::Data<Pool>) -> Result<HttpResponse, Error> {
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "get_anime_home_handler, failed to get db connection"))?;
+
+    log::info!("[API][V2][ANIME] get_anime_home_handler: /home");
+
+    let res = get_anime_home(db_connection)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_home_handler, get_anime_home failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+async fn get_anime_home(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<Vec<anime_list::AnimeList>, Error> {
     let mut anime_vec = dao::anime_list::get_by_subscribestatus(db_connection, 1)
         .await
-        .unwrap();
-    let task_vec = dao::anime_task::get_all(db_connection).await.unwrap();
+        .map_err(|e| handle_error(e, "get_anime_home, dao::anime_list::get_by_subscribestatus"))?;
+
+    let task_vec = dao::anime_task::get_all(db_connection)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_home, dao::anime_task::get_all"))?;
+
     let mut task_mikan_id_set: HashSet<i32> = HashSet::new();
     for task in task_vec {
-        if !task_mikan_id_set.contains(&task.mikan_id) {
-            task_mikan_id_set.insert(task.mikan_id);
-            if let Ok(anime) = dao::anime_list::get_by_mikanid(db_connection, task.mikan_id).await {
-                if anime.subscribe_status == 0 {
-                    task_mikan_id_set.insert(anime.mikan_id);
-                    anime_vec.push(anime);
-                }
-            } else {
-                println!("this anime is not in db, mikan_id: {}", task.mikan_id)
+        if !task_mikan_id_set.insert(task.mikan_id) {
+            continue;
+        }
+        if let Ok(anime) = dao::anime_list::get_by_mikanid(db_connection, task.mikan_id)
+            .await
+            .map_err(|e| handle_error(e, "get_anime_home, dao::anime_list::get_by_mikanid"))
+        {
+            if anime.subscribe_status == 0 {
+                anime_vec.push(anime);
             }
         }
     }
 
     for anime in anime_vec.iter_mut() {
-        let mut parts = anime.img_url.split('/');
-        let img_name = parts.nth(4).unwrap();
-        anime.img_url = format!("/static/img/anime_list/{}", img_name);
+        let parts: Vec<&str> = anime.img_url.split('/').collect();
+        if let Some(img_name) = parts.get(4) {
+            // anime.img_url = format!("/static/img/anime_list/{}", img_name);
+            anime.img_url = img_name.to_string();
+        } else {
+            log::warn!(
+                "get_anime_home, unexpected img_url format: {}",
+                anime.img_url
+            )
+        }
     }
+
     anime_vec.sort();
     Ok(anime_vec)
 }
