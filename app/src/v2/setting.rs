@@ -28,7 +28,7 @@ pub async fn start_schedule_task_handler(
     let run_handle = tokio::spawn(async move {
         do_anime_task::run_task(&status, &qb, &mut pool.get().unwrap()).await;
     });
-    run_handle.await.unwrap();
+    drop(run_handle);
     Ok(HttpResponse::Ok().body("ok"))
 }
 
@@ -55,7 +55,7 @@ pub async fn get_task_status_handler(
     Ok(match do_anime_task::get_task_status(&status).await {
         Ok(task_status) => {
             if task_status {
-                HttpResponse::Ok().body("Task Running")
+                HttpResponse::Ok().body("Task is Running")
             } else {
                 HttpResponse::Ok().body("Task is not Running")
             }

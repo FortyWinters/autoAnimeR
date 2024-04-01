@@ -32,7 +32,8 @@ pub async fn create_anime_task_bulk(
     let anime_list_vec = dao::anime_list::get_by_subscribestatus(db_connection, 1)
         .await
         .unwrap();
-    println!("{:?}", anime_list_vec);
+    log::info!("anime list: {:?}", anime_list_vec);
+    // println!("{:?}", anime_list_vec);
 
     // 得到订阅的全部种子
     let mut anime_seed_vec: Vec<AnimeSeed> = Vec::new();
@@ -192,7 +193,8 @@ pub async fn filter_and_download(
     .await
     .unwrap();
 
-    println!("new_anime_seed_vec: {:?}", new_anime_seed_vec);
+    log::info!("new anime seed: {:?}", new_anime_seed_vec);
+    // println!("new_anime_seed_vec: {:?}", new_anime_seed_vec);
 
     // 下载种子
     let mut download_success_vec: Vec<AnimeSeed> = Vec::new();
@@ -218,8 +220,8 @@ pub async fn filter_and_download(
             }
         }
     }
-
-    println!("download_failed_vec: {:?}", download_failed_vec);
+    log::info!("download failed vec: {:?}", download_failed_vec);
+    // println!("download_failed_vec: {:?}", download_failed_vec);
 
     // 更新 anime_seed table
     let mut anime_task_info_vec: Vec<AnimeTaskJson> = Vec::new();
@@ -374,7 +376,8 @@ pub async fn exit_task(status: &Arc<TokioRwLock<bool>>) {
     log::info!("Stop scheduled task");
     let mut writer = status.write().await;
     *writer = false;
-    println!("{}", writer);
+    log::info!("Task status has been changed to false");
+    // println!("{}", writer);
 }
 
 pub async fn change_task_interval(
