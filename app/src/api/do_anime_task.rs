@@ -136,8 +136,6 @@ pub async fn create_anime_task_from_exist_files(
     let files = std::fs::read_dir(path).unwrap();
     for file in files {
         let file = file?;
-        println!("{:?}", file);
-
         let filename = file.file_name().to_string_lossy().to_string();
         if filename == "seed" || filename == ".DS_Store" {
             continue;

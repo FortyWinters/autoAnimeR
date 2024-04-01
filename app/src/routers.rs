@@ -58,3 +58,15 @@ pub fn anime_routes_v2(cfg: &mut web::ServiceConfig) {
             // .service(create_task_by_episode_handler)
     );
 }
+
+pub fn setting_routes_v2(cfg: &mut web::ServiceConfig) {
+    use crate::v2::setting::*;
+    cfg.service(
+        web::scope("/v2/setting")
+            .service(exit_schedule_task_handler)
+            .service(start_schedule_task_handler)
+            .service(change_task_interval_handler)
+            .service(get_task_status_handler)
+            .service(reload_task_handler)
+    );
+}
