@@ -1,11 +1,12 @@
 use crate::dao;
 use crate::models::anime_list;
 use crate::Pool;
-use actix_web::{get, web, Error, HttpResponse};
+use actix_web::{get, post, web, Error, HttpResponse};
 use anyhow::Result;
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::SqliteConnection;
 use log;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> actix_web::Error {
@@ -25,6 +26,7 @@ fn get_img_name_from_url(img_url: &str) -> Option<String> {
 
 #[get("/home")]
 pub async fn get_anime_home_handler(pool: web::Data<Pool>) -> Result<HttpResponse, Error> {
+    log::info!("[API][V2][ANIME] get_anime_home_handler: /home");
     let db_connection = &mut pool
         .get()
         .map_err(|e| handle_error(e, "get_anime_home_handler, failed to get db connection"))?;
@@ -33,7 +35,6 @@ pub async fn get_anime_home_handler(pool: web::Data<Pool>) -> Result<HttpRespons
         .await
         .map_err(|e| handle_error(e, "get_anime_home_handler, get_anime_home failed"))?;
 
-    log::info!("[API][V2][ANIME] get_anime_home_handler: /home");
     Ok(HttpResponse::Ok().json(res))
 }
 
@@ -42,11 +43,16 @@ async fn get_anime_home(
 ) -> Result<Vec<anime_list::AnimeList>, Error> {
     let mut anime_vec = dao::anime_list::get_by_subscribestatus(db_connection, 1)
         .await
-        .map_err(|e| handle_error(e, "get_anime_home, dao::anime_list::get_by_subscribestatus"))?;
+        .map_err(|e| {
+            handle_error(
+                e,
+                "get_anime_home, dao::anime_list::get_by_subscribestatus failed",
+            )
+        })?;
 
     let task_vec = dao::anime_task::get_all(db_connection)
         .await
-        .map_err(|e| handle_error(e, "get_anime_home, dao::anime_task::get_all"))?;
+        .map_err(|e| handle_error(e, "get_anime_home, dao::anime_task::get_all failed"))?;
 
     let mut task_mikan_id_set: HashSet<i32> = HashSet::new();
     for task in task_vec {
@@ -55,7 +61,7 @@ async fn get_anime_home(
         }
         if let Ok(anime) = dao::anime_list::get_by_mikanid(db_connection, task.mikan_id)
             .await
-            .map_err(|e| handle_error(e, "get_anime_home, dao::anime_list::get_by_mikanid"))
+            .map_err(|e| handle_error(e, "get_anime_home, dao::anime_list::get_by_mikanid failed"))
         {
             if anime.subscribe_status == 0 {
                 anime_vec.push(anime);
@@ -76,6 +82,7 @@ pub async fn get_anime_info_handler(
     pool: web::Data<Pool>,
     path: web::Path<(i32,)>,
 ) -> Result<HttpResponse, Error> {
+    log::info!("[API][V2][ANIME] get_anime_info_handler: /info/{}", path.0);
     let db_connection = &mut pool
         .get()
         .map_err(|e| handle_error(e, "get_anime_info_handler, failed to get db connection"))?;
@@ -84,7 +91,6 @@ pub async fn get_anime_info_handler(
         .await
         .map_err(|e| handle_error(e, "get_anime_info_handler, get_anime_info failed"))?;
 
-    log::info!("[API][V2][ANIME] get_anime_info_handler: /info/{}", path.0);
     Ok(HttpResponse::Ok().json(res))
 }
 
@@ -94,9 +100,53 @@ async fn get_anime_info(
 ) -> Result<anime_list::AnimeList, Error> {
     let mut anime_info = dao::anime_list::get_by_mikanid(db_connection, mikan_id)
         .await
-        .map_err(|e| handle_error(e, "get_anime_info, dao::anime_list::get_by_mikanid"))?;
+        .map_err(|e| handle_error(e, "get_anime_info, dao::anime_list::get_by_mikanid failed"))?;
 
     anime_info.img_url =
         get_img_name_from_url(&anime_info.img_url).unwrap_or_else(|| anime_info.img_url.clone());
     Ok(anime_info)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AnimeRequestJson {
+    pub mikan_id: i32,
+    pub subscribe_status: i32,
+}
+
+#[post("/subscribe")]
+pub async fn subscribe_anime_handler(
+    pool: web::Data<Pool>,
+    item: web::Json<AnimeRequestJson>,
+) -> Result<HttpResponse, Error> {
+    log::info!(
+        "[API][V2][ANIME] subscribe_anime_handler: /subscribe {:?}",
+        item
+    );
+
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "subscribe_anime_handler, failed to get db connection"))?;
+
+    let res = subscribe_anime(db_connection, item.into_inner())
+        .await
+        .map_err(|e| handle_error(e, "subscribe_anime_handler, subscribe_anime failed"))?;
+
+    Ok(HttpResponse::Created().json(res))
+}
+
+async fn subscribe_anime(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    item: AnimeRequestJson,
+) -> Result<(), Error> {
+    let mikan_id = item.mikan_id;
+    let subscribe_status = if item.subscribe_status == 1 { 0 } else { 1 };
+
+    dao::anime_list::update_subscribestatus_by_mikanid(db_connection, mikan_id, subscribe_status)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "subscribe_anime, dao::anime_list::update_subscribestatus_by_mikanid failed",
+            )
+        })
 }
