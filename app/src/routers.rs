@@ -46,6 +46,7 @@ pub fn anime_routes_v2(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/v2/anime")
             .service(get_anime_home_handler)
+            .service(get_anime_info_handler)
             // .service(update_anime_list_handler)
             // .service(anime_list_by_broadcast_handler)
             // .service(subscribe_anime_handler)
