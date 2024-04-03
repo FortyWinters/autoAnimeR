@@ -1,5 +1,5 @@
 use crate::dao;
-use crate::models::anime_list;
+use crate::models::{anime_broadcast, anime_list};
 use crate::Pool;
 use actix_web::{get, post, web, Error, HttpResponse};
 use anyhow::Result;
@@ -149,4 +149,72 @@ async fn subscribe_anime(
                 "subscribe_anime, dao::anime_list::update_subscribestatus_by_mikanid failed",
             )
         })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BroadcastRequestJson {
+    pub year: i32,
+    pub season: i32,
+}
+
+#[get("/broadcast/{year}/{season}")]
+pub async fn get_anime_broadcast_handler(
+    pool: web::Data<Pool>,
+    path: web::Path<(i32, i32)>,
+) -> Result<HttpResponse, Error> {
+    let (year, season) = path.into_inner();
+    log::info!(
+        "[API][V2][ANIME] get_anime_broadcast_handler: /broadcast/{}/{}",
+        year,
+        season
+    );
+
+    let db_connection = &mut pool.get().map_err(|e| {
+        handle_error(
+            e,
+            "get_anime_broadcast_handler, failed to get db connection",
+        )
+    })?;
+
+    let res = get_anime_broadcast(db_connection, year, season)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_broadcast_handler, get_anime_broadcast failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+async fn get_anime_broadcast(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    year: i32,
+    season: i32,
+) -> Result<Vec<anime_list::AnimeList>, Error> {
+    let broadcast_list: Vec<anime_broadcast::AnimeBroadcast> =
+        dao::anime_broadcast::get_by_year_season(db_connection, year, season)
+            .await
+            .map_err(|e| {
+                handle_error(
+                    e,
+                    "get_anime_broadcast, dao::anime_broadcast::get_by_year_season failed",
+                )
+            })?;
+
+    let mut anime_vec: Vec<anime_list::AnimeList> = Vec::new();
+
+    for anime_broadcast in &broadcast_list {
+        let mut anime = dao::anime_list::get_by_mikanid(db_connection, anime_broadcast.mikan_id)
+            .await
+            .map_err(|e| {
+                handle_error(
+                    e,
+                    "get_anime_broadcast, dao::anime_list::get_by_mikanid failed",
+                )
+            })?;
+
+        anime.img_url =
+            get_img_name_from_url(&anime.img_url).unwrap_or_else(|| anime.img_url.clone());
+
+        anime_vec.push(anime);
+    }
+    anime_vec.sort();
+    Ok(anime_vec)
 }
