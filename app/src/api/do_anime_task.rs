@@ -307,7 +307,8 @@ pub async fn download_seed_handler(
     anime_seed: AnimeSeed,
     mikan: &Mikan,
 ) -> Result<DownloadSeedStatus, Error> {
-    println!("processing {}", anime_seed.seed_name);
+    log::info!("processing {}", anime_seed.seed_name);
+    // println!("processing {}", anime_seed.seed_name);
     match mikan
         .download_seed(
             &anime_seed.seed_url,
