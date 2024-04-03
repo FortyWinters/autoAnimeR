@@ -49,7 +49,7 @@ pub fn anime_routes_v2(cfg: &mut web::ServiceConfig) {
             .service(get_anime_info_handler)
             .service(subscribe_anime_handler)
             .service(get_anime_broadcast_handler)
-            // .service(update_anime_list_handler)
+            .service(update_anime_broadcast_handler)
             // .service(update_anime_seed_handler)
             // .service(recover_seed_handler)
             // .service(delete_anime_data_handler)

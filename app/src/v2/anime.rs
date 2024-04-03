@@ -1,10 +1,12 @@
 use crate::dao;
 use crate::models::{anime_broadcast, anime_list};
+use crate::mods::spider::{self, Mikan};
 use crate::Pool;
 use actix_web::{get, post, web, Error, HttpResponse};
 use anyhow::Result;
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::SqliteConnection;
+use futures::future::join_all;
 use log;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -131,7 +133,7 @@ pub async fn subscribe_anime_handler(
         .await
         .map_err(|e| handle_error(e, "subscribe_anime_handler, subscribe_anime failed"))?;
 
-    Ok(HttpResponse::Created().json(res))
+    Ok(HttpResponse::Ok().json(res))
 }
 
 async fn subscribe_anime(
@@ -217,4 +219,97 @@ async fn get_anime_broadcast(
     }
     anime_vec.sort();
     Ok(anime_vec)
+}
+
+#[post("/broadcast/update")]
+pub async fn update_anime_broadcast_handler(
+    pool: web::Data<Pool>,
+    item: web::Json<BroadcastRequestJson>,
+) -> Result<HttpResponse, Error> {
+    log::info!(
+        "[API][V2][ANIME] update_anime_broadcast_handler: /broadcast/update {:?}",
+        item
+    );
+
+    let db_connection = &mut pool.get().map_err(|e| {
+        handle_error(
+            e,
+            "update_anime_broadcast_handler, failed to get db connection",
+        )
+    })?;
+
+    let res = update_anime_broadcast(db_connection, item.into_inner())
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "update_anime_broadcast_handler, update_anime_broadcast failed",
+            )
+        })?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+async fn update_anime_broadcast(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    item: BroadcastRequestJson,
+) -> Result<(), Error> {
+    let year = item.year;
+    let season = item.season;
+
+    let mikan = spider::Mikan::new()?;
+    let anime_list = mikan.get_anime(year, season).await?;
+    let mut anime_list_json_vec: Vec<anime_list::AnimeListJson> = Vec::new();
+    let mut anime_broadcast_json_vec: Vec<anime_broadcast::AnimeBroadcastJson> = Vec::new();
+    let mut img_url_vec: Vec<String> = Vec::new();
+
+    for anime in &anime_list {
+        anime_list_json_vec.push(anime_list::AnimeListJson {
+            mikan_id: anime.mikan_id,
+            anime_name: anime.anime_name.clone(),
+            img_url: anime.img_url.clone(),
+            update_day: anime.update_day,
+            anime_type: anime.anime_type,
+            subscribe_status: anime.subscribe_status,
+        });
+        anime_broadcast_json_vec.push(anime_broadcast::AnimeBroadcastJson {
+            mikan_id: anime.mikan_id,
+            year: item.year,
+            season: item.season,
+        });
+        img_url_vec.push(anime.img_url.clone());
+    }
+
+    dao::anime_list::add_vec(db_connection, anime_list_json_vec)
+        .await
+        .map_err(|e| handle_error(e, "update_anime_broadcast, dao::anime_list::add_vec failed"))?;
+
+    dao::anime_broadcast::add_vec(db_connection, anime_broadcast_json_vec)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "update_anime_broadcast, dao::anime_broadcast::add_vec failed",
+            )
+        })?;
+
+    let save_path = "static/img/anime_list".to_string();
+    if !img_url_vec.is_empty() {
+        let _ = join_all(
+            img_url_vec
+                .into_iter()
+                .map(|img_url| download_anime_img(img_url, &save_path, &mikan)),
+        )
+        .await;
+    }
+
+    Ok(())
+}
+
+pub async fn download_anime_img(
+    img_url: String,
+    save_path: &str,
+    mikan: &Mikan,
+) -> Result<(), Error> {
+    Ok(mikan.download_img(&img_url, save_path).await?)
 }
