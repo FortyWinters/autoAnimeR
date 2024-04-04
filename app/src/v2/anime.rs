@@ -1,5 +1,5 @@
 use crate::dao;
-use crate::models::{anime_broadcast, anime_list};
+use crate::models::{anime_broadcast, anime_list, anime_seed, anime_subgroup, anime_task};
 use crate::mods::spider::{self, Mikan};
 use crate::Pool;
 use actix_web::{get, post, web, Error, HttpResponse};
@@ -28,7 +28,7 @@ fn get_img_name_from_url(img_url: &str) -> Option<String> {
 
 #[get("/home")]
 pub async fn get_anime_home_handler(pool: web::Data<Pool>) -> Result<HttpResponse, Error> {
-    log::info!("[API][V2][ANIME] get_anime_home_handler: /home");
+    log::info!("get_anime_home_handler: /home");
     let db_connection = &mut pool
         .get()
         .map_err(|e| handle_error(e, "get_anime_home_handler, failed to get db connection"))?;
@@ -84,7 +84,7 @@ pub async fn get_anime_info_handler(
     pool: web::Data<Pool>,
     path: web::Path<(i32,)>,
 ) -> Result<HttpResponse, Error> {
-    log::info!("[API][V2][ANIME] get_anime_info_handler: /info/{}", path.0);
+    log::info!("get_anime_info_handler: /info/{}", path.0);
     let db_connection = &mut pool
         .get()
         .map_err(|e| handle_error(e, "get_anime_info_handler, failed to get db connection"))?;
@@ -110,7 +110,7 @@ async fn get_anime_info(
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AnimeRequestJson {
+pub struct AnimeSubscribeRequestJson {
     pub mikan_id: i32,
     pub subscribe_status: i32,
 }
@@ -118,12 +118,9 @@ pub struct AnimeRequestJson {
 #[post("/subscribe")]
 pub async fn subscribe_anime_handler(
     pool: web::Data<Pool>,
-    item: web::Json<AnimeRequestJson>,
+    item: web::Json<AnimeSubscribeRequestJson>,
 ) -> Result<HttpResponse, Error> {
-    log::info!(
-        "[API][V2][ANIME] subscribe_anime_handler: /subscribe {:?}",
-        item
-    );
+    log::info!("subscribe_anime_handler: /subscribe {:?}", item);
 
     let db_connection = &mut pool
         .get()
@@ -138,7 +135,7 @@ pub async fn subscribe_anime_handler(
 
 async fn subscribe_anime(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    item: AnimeRequestJson,
+    item: AnimeSubscribeRequestJson,
 ) -> Result<(), Error> {
     let mikan_id = item.mikan_id;
     let subscribe_status = if item.subscribe_status == 1 { 0 } else { 1 };
@@ -166,7 +163,7 @@ pub async fn get_anime_broadcast_handler(
 ) -> Result<HttpResponse, Error> {
     let (year, season) = path.into_inner();
     log::info!(
-        "[API][V2][ANIME] get_anime_broadcast_handler: /broadcast/{}/{}",
+        "get_anime_broadcast_handler: /broadcast/{}/{}",
         year,
         season
     );
@@ -227,7 +224,7 @@ pub async fn update_anime_broadcast_handler(
     item: web::Json<BroadcastRequestJson>,
 ) -> Result<HttpResponse, Error> {
     log::info!(
-        "[API][V2][ANIME] update_anime_broadcast_handler: /broadcast/update {:?}",
+        "update_anime_broadcast_handler: /broadcast/update {:?}",
         item
     );
 
@@ -312,4 +309,207 @@ pub async fn download_anime_img(
     mikan: &Mikan,
 ) -> Result<(), Error> {
     Ok(mikan.download_img(&img_url, save_path).await?)
+}
+
+#[get("/seed/{mikan_id}")]
+pub async fn get_anime_seed_handler(
+    pool: web::Data<Pool>,
+    path: web::Path<(i32,)>,
+) -> Result<HttpResponse, Error> {
+    log::info!("get_anime_seed_handler: /seed/{}", path.0);
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "get_anime_seed_handler, failed to get db connection"))?;
+
+    let res = get_anime_seed(db_connection, path.0)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_seed_handler, get_anime_seed failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+async fn get_anime_seed(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    mikan_id: i32,
+) -> Result<Vec<anime_seed::AnimeSeed>, Error> {
+    let seed_info = dao::anime_seed::get_anime_seed_by_mikan_id(db_connection, mikan_id)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "get_anime_seed, dao::anime_seed::get_anime_seed_by_mikan_id failed",
+            )
+        })?;
+
+    Ok(seed_info)
+}
+
+#[get("/subgroup")]
+pub async fn get_subgroup_handler(pool: web::Data<Pool>) -> Result<HttpResponse, Error> {
+    log::info!("get_subgroup_handler: /subgroup");
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "get_subgroup_handler, failed to get db connection"))?;
+
+    let res = get_subgroup(db_connection)
+        .await
+        .map_err(|e| handle_error(e, "get_subgroup_handler, get_subgroup failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+async fn get_subgroup(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<Vec<anime_subgroup::AnimeSubgroup>, Error> {
+    let subgroup_info = dao::anime_subgroup::get_all(db_connection)
+        .await
+        .map_err(|e| handle_error(e, "get_subgroup, dao::anime_subgroup::get_all failed"))?;
+
+    Ok(subgroup_info)
+}
+
+#[get("/task/{mikan_id}")]
+pub async fn get_task_handler(
+    pool: web::Data<Pool>,
+    path: web::Path<(i32,)>,
+) -> Result<HttpResponse, Error> {
+    log::info!("get_task_handler: /task/{}", path.0);
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "get_task_handler, failed to get db connection"))?;
+
+    let res = get_task(db_connection, path.0)
+        .await
+        .map_err(|e| handle_error(e, "get_task_handler, get_task failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+async fn get_task(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    mikan_id: i32,
+) -> Result<Vec<anime_task::AnimeTask>, Error> {
+    let task_info = dao::anime_task::get_exist_anime_task_by_mikan_id(db_connection, mikan_id)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "get_task, dao::anime_task::get_exist_anime_task_by_mikan_id failed",
+            )
+        })?;
+
+    Ok(task_info)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AnimeRequestJson {
+    pub mikan_id: i32,
+}
+
+#[post("/seed/update")]
+pub async fn seed_update_handler(
+    pool: web::Data<Pool>,
+    item: web::Json<AnimeRequestJson>,
+) -> Result<HttpResponse, Error> {
+    log::info!("seed_update_handler: /seed/update {:?}", item);
+
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "seed_update_handler, failed to get db connection"))?;
+
+    let res = seed_update(db_connection, item.into_inner())
+        .await
+        .map_err(|e| handle_error(e, "seed_update_handler, subscribe_anime failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+async fn seed_update(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    item: AnimeRequestJson,
+) -> Result<(), Error> {
+    let mikan_id = item.mikan_id;
+
+    let mikan = spider::Mikan::new()?;
+
+    let anime_info = dao::anime_list::get_by_mikanid(db_connection, mikan_id)
+        .await
+        .map_err(|e| handle_error(e, "seed_update, dao::anime_list::get_by_mikanid failed"))?;
+
+    let anime_type = anime_info.anime_type;
+
+    let subgroup_list = mikan.get_subgroup(mikan_id).await?;
+
+    let mut subgroup_id_vec: Vec<i32> = Vec::new();
+    for s in &subgroup_list {
+        subgroup_id_vec.push(s.subgroup_id);
+    }
+
+    let anime_subgroup_list = convert_spider_subgroup_to_anime_subgroup(subgroup_list);
+
+    dao::anime_subgroup::add_vec(db_connection, anime_subgroup_list)
+        .await
+        .map_err(|e| handle_error(e, "update_seed, dao::anime_subgroup::add_vec failed"))?;
+
+    let mut seed_vec: Vec<anime_seed::AnimeSeedJson> = Vec::new();
+    if !subgroup_id_vec.is_empty() {
+        let task_res_vec = join_all(subgroup_id_vec.into_iter().map(|subgroup_id| {
+            get_anime_seed_by_spider(mikan_id, subgroup_id, anime_type, &mikan)
+        }))
+        .await;
+
+        for task_res in task_res_vec {
+            match task_res {
+                Ok(seed_list) => {
+                    seed_vec.extend(seed_list);
+                }
+                Err(_) => continue,
+            }
+        }
+    }
+
+    dao::anime_seed::add_bulk(db_connection, seed_vec)
+        .await
+        .map_err(|e| handle_error(e, "update_seed, dao::anime_seed::add_bulk failed"))?;
+
+    Ok(())
+}
+
+fn convert_spider_subgroup_to_anime_subgroup(
+    spider_vec: Vec<spider::Subgroup>,
+) -> Vec<anime_subgroup::AnimeSubgroupJson> {
+    spider_vec
+        .into_iter()
+        .map(|s| anime_subgroup::AnimeSubgroupJson {
+            subgroup_name: s.subgroup_name,
+            subgroup_id: s.subgroup_id,
+        })
+        .collect()
+}
+
+pub async fn get_anime_seed_by_spider(
+    mikan_id: i32,
+    subgroup_id: i32,
+    anime_type: i32,
+    mikan: &spider::Mikan,
+) -> Result<Vec<anime_seed::AnimeSeedJson>, Error> {
+    let seed_list: Vec<spider::Seed> = mikan.get_seed(mikan_id, subgroup_id, anime_type).await?;
+    Ok(convert_spider_seed_to_anime_seed(seed_list))
+}
+
+fn convert_spider_seed_to_anime_seed(
+    spider_vec: Vec<spider::Seed>,
+) -> Vec<anime_seed::AnimeSeedJson> {
+    spider_vec
+        .into_iter()
+        .map(|s| anime_seed::AnimeSeedJson {
+            mikan_id: s.mikan_id,
+            subgroup_id: s.subgroup_id,
+            episode: s.episode,
+            seed_name: s.seed_name,
+            seed_url: s.seed_url,
+            seed_status: s.seed_status,
+            seed_size: s.seed_size,
+        })
+        .collect()
 }
