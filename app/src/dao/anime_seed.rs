@@ -136,6 +136,7 @@ pub async fn update_seedstatus_by_seedurl(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn update_seedstatus_by_seedurl_with_response(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     query_seedurl: &String,

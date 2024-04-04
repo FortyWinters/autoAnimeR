@@ -1,5 +1,7 @@
+use crate::api::do_anime_task;
 use crate::dao;
 use crate::models::{anime_broadcast, anime_list, anime_seed, anime_subgroup, anime_task};
+use crate::mods::qb_api::QbitTaskExecutor;
 use crate::mods::spider::{self, Mikan};
 use crate::Pool;
 use actix_web::{get, post, web, Error, HttpResponse};
@@ -538,11 +540,92 @@ pub async fn seed_delete(
 ) -> Result<(), Error> {
     dao::anime_seed::delete_anime_seed_by_mikan_id(db_connection, item.mikan_id)
         .await
-        .map_err(|e| handle_error(e, "seed_delete, dao::anime_seed::delete_anime_seed_by_mikan_id"))?;
+        .map_err(|e| {
+            handle_error(
+                e,
+                "seed_delete, dao::anime_seed::delete_anime_seed_by_mikan_id",
+            )
+        })?;
 
     dao::anime_task::delete_anime_task_by_mikan_id(db_connection, item.mikan_id)
         .await
-        .map_err(|e| handle_error(e, "seed_delete, dao::anime_task::delete_anime_task_by_mikan_id"))?;
+        .map_err(|e| {
+            handle_error(
+                e,
+                "seed_delete, dao::anime_task::delete_anime_task_by_mikan_id",
+            )
+        })?;
 
     Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SeedRequestJson {
+    pub mikan_id: i32,
+    pub subgroup_id: i32,
+    pub episode: i32,
+    pub seed_name: String,
+    pub seed_url: String,
+    pub seed_status: i32,
+    pub seed_size: String,
+}
+#[post("/seed/download")]
+pub async fn seed_download_handler(
+    pool: web::Data<Pool>,
+    item: web::Json<SeedRequestJson>,
+    qb: web::Data<QbitTaskExecutor>,
+) -> Result<HttpResponse, Error> {
+    log::info!("seed_download_handler: /seed/download {:?}", item);
+
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "seed_download_handler, failed to get db connection"))?;
+
+    let res = seed_download(db_connection, item.into_inner(), qb)
+        .await
+        .map_err(|e| handle_error(e, "seed_download_handler, seed_download failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+pub async fn seed_download(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    item: SeedRequestJson,
+    qb: web::Data<QbitTaskExecutor>,
+) -> Result<(), Error> {
+    let mikan = spider::Mikan::new()?;
+
+    dao::anime_seed::update_seedstatus_by_seedurl(db_connection, &item.seed_url, 1)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "seed_download, dao::anime_seed::update_seedstatus_by_seedurl failed",
+            )
+        })?;
+
+    let anime_seed = convert_json_seed_to_anime_seed(item);
+
+    do_anime_task::create_anime_task_by_seed(&mikan, anime_seed, &qb, db_connection)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "seed_download do_anime_task::create_anime_task_by_seed failed",
+            )
+        })?;
+    Ok(())
+}
+
+fn convert_json_seed_to_anime_seed(sj: SeedRequestJson) -> anime_seed::AnimeSeed {
+    anime_seed::AnimeSeed {
+        id: None,
+        mikan_id: sj.mikan_id,
+        subgroup_id: sj.subgroup_id,
+        episode: sj.episode,
+        seed_name: sj.seed_name,
+        seed_url: sj.seed_url,
+        seed_status: sj.seed_status,
+        seed_size: sj.seed_size,
+    }
 }

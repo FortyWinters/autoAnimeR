@@ -55,9 +55,7 @@ pub fn anime_routes_v2(cfg: &mut web::ServiceConfig) {
             .service(get_task_handler)
             .service(seed_update_handler)
             .service(seed_delete_handler)
-            // .service(recover_seed_handler)
-            // .service(create_task_by_seed_url_handler)
-            // .service(create_task_by_episode_handler)
+            .service(seed_download_handler)
     );
 }
 
