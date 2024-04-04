@@ -513,3 +513,36 @@ fn convert_spider_seed_to_anime_seed(
         })
         .collect()
 }
+
+#[post("/seed/delete")]
+pub async fn seed_delete_handler(
+    pool: web::Data<Pool>,
+    item: web::Json<AnimeRequestJson>,
+) -> Result<HttpResponse, Error> {
+    log::info!("seed_delete_handler: /seed/delete {:?}", item);
+
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "seed_delete_handler, failed to get db connection"))?;
+
+    let res = seed_delete(db_connection, item.into_inner())
+        .await
+        .map_err(|e| handle_error(e, "seed_delete_handler, seed_delete failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+pub async fn seed_delete(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    item: AnimeRequestJson,
+) -> Result<(), Error> {
+    dao::anime_seed::delete_anime_seed_by_mikan_id(db_connection, item.mikan_id)
+        .await
+        .map_err(|e| handle_error(e, "seed_delete, dao::anime_seed::delete_anime_seed_by_mikan_id"))?;
+
+    dao::anime_task::delete_anime_task_by_mikan_id(db_connection, item.mikan_id)
+        .await
+        .map_err(|e| handle_error(e, "seed_delete, dao::anime_task::delete_anime_task_by_mikan_id"))?;
+
+    Ok(())
+}
