@@ -292,7 +292,8 @@ async fn update_anime_broadcast(
             )
         })?;
 
-    let save_path = "static/img/anime_list".to_string();
+    // TODO 需要从config中读取
+    let save_path = "../../autoAnimeUI/src/assets/images/anime_list".to_string();
     if !img_url_vec.is_empty() {
         let _ = join_all(
             img_url_vec
