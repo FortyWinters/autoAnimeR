@@ -28,6 +28,16 @@ fn get_img_name_from_url(img_url: &str) -> Option<String> {
     }
 }
 
+fn get_torrent_name_from_url(seed_url: &str) -> Option<String> {
+    let parts: Vec<&str> = seed_url.split('/').collect();
+    if let Some(torrent_name) = parts.get(3) {
+        Some(torrent_name.to_string())
+    } else {
+        log::warn!("unexpected seed_url format: {}", seed_url);
+        None
+    }
+}
+
 #[get("/home")]
 pub async fn get_anime_home_handler(pool: web::Data<Pool>) -> Result<HttpResponse, Error> {
     log::info!("get_anime_home_handler: /home");
@@ -679,4 +689,46 @@ async fn get_anime_detail(
         task_info: task_vec,
     };
     Ok(anime_detail)
+}
+
+#[post("/task/delete")]
+pub async fn task_delete_handler(
+    pool: web::Data<Pool>,
+    item: web::Json<SeedRequestJson>,
+    qb: web::Data<QbitTaskExecutor>,
+) -> Result<HttpResponse, Error> {
+    log::info!("task_delete_handler: /task/delete {:?}", item);
+
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "task_delete_handler, failed to get db connection"))?;
+
+    let res = task_delete(db_connection, item.into_inner(), qb)
+        .await
+        .map_err(|e| handle_error(e, "task_delete_handler, task_delete failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+pub async fn task_delete(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    item: SeedRequestJson,
+    qb: web::Data<QbitTaskExecutor>,
+) -> Result<(), Error> {
+    let torrent_name =
+        get_torrent_name_from_url(&item.seed_url).unwrap_or_else(|| item.seed_url.clone());
+
+    qb.qb_api_del_torrent(&torrent_name)
+        .await
+        .map_err(|e| handle_error(e, "task_delete, qb_api_del_torrent failed"))?;
+
+    dao::anime_task::delete_anime_task_by_torrent_name(db_connection, &torrent_name)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "task_delete, dao::anime_task::delete_anime_task_by_torrent_name failed",
+            )
+        })?;
+    Ok(())
 }
