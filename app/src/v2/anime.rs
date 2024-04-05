@@ -645,13 +645,14 @@ fn convert_json_seed_to_anime_seed(sj: SeedRequestJson) -> anime_seed::AnimeSeed
 pub async fn get_anime_detail_handler(
     pool: web::Data<Pool>,
     path: web::Path<(i32,)>,
+    qb: web::Data<QbitTaskExecutor>,
 ) -> Result<HttpResponse, Error> {
     log::info!("get_anime_detail_handler: /detail/{}", path.0);
     let db_connection = &mut pool
         .get()
         .map_err(|e| handle_error(e, "get_anime_detail_handler, failed to get db connection"))?;
 
-    let res = get_anime_detail(db_connection, path.0)
+    let res = get_anime_detail(db_connection, path.0, qb)
         .await
         .map_err(|e| handle_error(e, "get_anime_detail_handler, get_anime_detail failed"))?;
 
@@ -668,7 +669,12 @@ pub struct AnimeDetail {
 async fn get_anime_detail(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     mikan_id: i32,
+    qb: web::Data<QbitTaskExecutor>,
 ) -> Result<AnimeDetail, Error> {
+    task_update(db_connection, qb)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_detail, task_update failed"))?;
+
     let anime = get_anime_info(db_connection, mikan_id)
         .await
         .map_err(|e| handle_error(e, "get_anime_detail, get_anime_info failed"))?;
@@ -728,6 +734,39 @@ pub async fn task_delete(
             handle_error(
                 e,
                 "task_delete, dao::anime_task::delete_anime_task_by_torrent_name failed",
+            )
+        })?;
+    Ok(())
+}
+
+#[post("/task/update")]
+pub async fn task_update_handler(
+    pool: web::Data<Pool>,
+    qb: web::Data<QbitTaskExecutor>,
+) -> Result<HttpResponse, Error> {
+    log::info!("task_update_handler: /task/udpate");
+
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "task_update_handler, failed to get db connection"))?;
+
+    let res = task_update(db_connection, qb)
+        .await
+        .map_err(|e| handle_error(e, "task_update_handler, task_update failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+pub async fn task_update(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    qb: web::Data<QbitTaskExecutor>,
+) -> Result<(), Error> {
+    do_anime_task::update_qb_task_status(&qb, db_connection)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "task_update, do_anime_task::update_qb_task_status failed",
             )
         })?;
     Ok(())
