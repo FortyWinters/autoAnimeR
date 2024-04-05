@@ -1,6 +1,7 @@
 use regex::Regex;
 use reqwest::Client;
 use select::document::Document;
+use select::predicate::Class;
 use select::predicate::{Attr, Name, Predicate};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -262,6 +263,83 @@ impl Mikan {
         let mut parts = seed_url.split('/');
         let new_name = parts.nth(3).unwrap();
         self.download(&download_url, save_path, new_name).await
+    }
+
+    pub async fn get_anime_by_mikan_id(&self, mikan_id: i32) -> Result<Anime, Box<dyn Error>> {
+        let url = format!("{}/Home/Bangumi/{}", self.url, mikan_id);
+        let document = self.request_html(&url).await?;
+
+        let mut anime_name = String::new();
+        let re = Regex::new(r"url\('([^']+)'\)").unwrap();
+        if let Some(node) = document.find(Class("bangumi-title")).next() {
+            anime_name.push_str(&node.text());
+        }
+
+        let mut img_url = String::new();
+        if let Some(node) = document.find(Class("bangumi-poster")).next() {
+            if let Some(style) = node.attr("style") {
+                if let Some(captures) = re.captures(style) {
+                    if let Some(url) = captures.get(1) {
+                        img_url.push_str(url.as_str());
+                    }
+                }
+            }
+        }
+
+        let anime_type;
+        let mut update_day = 0;
+
+        if let Some(node) = document.find(Class("bangumi-info")).next() {
+            if node.text().contains("放送日期") {
+                let text = node
+                    .text()
+                    .replace("星期一", "1")
+                    .replace("星期二", "2")
+                    .replace("星期三", "3")
+                    .replace("星期四", "4")
+                    .replace("星期五", "5")
+                    .replace("星期六", "6")
+                    .replace("星期日", "7");
+                let re = Regex::new(r"\d+").unwrap();
+                if let Some(captures) = re.captures(&text) {
+                    if let Some(number) = captures.get(0) {
+                        update_day = number.as_str().parse::<i32>().unwrap();
+                    }
+                }
+            }
+        }
+
+        match update_day {
+            7 => {
+                anime_type = 1; // movie
+                update_day = 8;
+            }
+            8 => {
+                anime_type = 2; // ova
+                update_day = 9;
+            }
+            0 => {
+                anime_type = 0;
+                update_day = 7; // udpate on sunday
+            }
+            _ => {
+                anime_type = 0;
+            }
+        }
+
+        println!("Anime Name: {}", anime_name);
+        println!("Image URL: {}", img_url);
+        println!("Anime Type: {}", anime_type);
+        println!("Update Day: {}", update_day);
+
+        Ok(Anime {
+            anime_name: anime_name,
+            mikan_id: mikan_id,
+            img_url: img_url,
+            update_day: update_day,
+            anime_type: anime_type,
+            subscribe_status: 0,
+        })
     }
 }
 

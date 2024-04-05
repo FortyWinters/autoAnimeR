@@ -1,5 +1,7 @@
 use crate::api::spider_task::do_spider_task;
 use crate::dao;
+use crate::dao::anime_seed::get_anime_seed_by_mikan_id;
+use crate::models::anime_list::AnimeListJson;
 use crate::models::anime_seed::AnimeSeed;
 use crate::models::anime_task::AnimeTaskJson;
 use crate::mods::anime_filter;
@@ -11,6 +13,7 @@ use diesel::r2d2::PooledConnection;
 use diesel::SqliteConnection;
 use futures::future::join_all;
 use log;
+use regex::Regex;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
@@ -138,6 +141,22 @@ pub async fn create_anime_task_from_exist_files(
     for file in files {
         let file = file?;
         let filename = file.file_name().to_string_lossy().to_string();
+
+        println!("{}", filename);
+        let mikan_id: i32;
+        let mikan = Mikan::new().unwrap();
+
+        let re = Regex::new(r"\((\d+)\)").unwrap();
+        if let Some(captures) = re.captures(filename.as_str()) {
+            if let Some(number_str) = captures.get(1) {
+                mikan_id = number_str.as_str().parse::<i32>().unwrap();
+                println!("{}", mikan_id);
+            } else {
+                continue;
+            }
+        } else {
+            continue;
+        }
         if filename == "seed" || filename == ".DS_Store" {
             continue;
         }
@@ -163,12 +182,47 @@ pub async fn create_anime_task_from_exist_files(
                     anime_task
                 );
             } else {
-                log::error!(
-                    "get mikan_id failed, anime_name: {}, episode: {}",
+                log::info!(
+                    "faile to find anime from anime list, try to update anime list ,anime_name: {}, episode: {}",
                     parts[0],
                     parts[1]
                 );
-                continue;
+
+                // update anime list
+                let anime = mikan.get_anime_by_mikan_id(mikan_id).await.unwrap();
+                let img_url = anime.img_url.clone();
+                dao::anime_list::add(
+                    db_connection,
+                    AnimeListJson {
+                        anime_name: anime.anime_name,
+                        anime_type: anime.anime_type,
+                        mikan_id: anime.mikan_id,
+                        update_day: anime.update_day,
+                        img_url: anime.img_url,
+                        subscribe_status: anime.subscribe_status,
+                    },
+                )
+                .await
+                .unwrap();
+
+                // download img
+                let save_path = "static/img/anime_list".to_string();
+                mikan.download_img(&img_url, &save_path).await.unwrap();
+
+                // update anime task
+                let anime_task = AnimeTaskJson {
+                    mikan_id,
+                    episode: parts[1].parse::<i32>().unwrap(),
+                    torrent_name: "unknow - ".to_string() + &each_episode,
+                    qb_task_status: 1,
+                };
+                dao::anime_task::add(db_connection, &anime_task)
+                    .await
+                    .unwrap();
+                log::info!(
+                    "add new anime task to db, anime_task detail: {:?}",
+                    anime_task
+                );
             }
         }
     }
@@ -469,9 +523,5 @@ mod test {
             QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
                 .await
                 .unwrap();
-
-        let _t = create_anime_task_from_exist_files(db_connection, &qb_task_executor)
-            .await
-            .unwrap();
     }
 }

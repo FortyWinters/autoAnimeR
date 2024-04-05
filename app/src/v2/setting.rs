@@ -44,7 +44,7 @@ pub async fn change_task_interval_handler(
         do_anime_task::change_task_interval(item.interval, &status, &qb, &mut pool.get().unwrap())
             .await;
     });
-    run_handle.await.unwrap();
+    drop(run_handle);
     Ok(HttpResponse::Ok().body("ok"))
 }
 
