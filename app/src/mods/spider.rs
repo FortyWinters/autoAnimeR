@@ -327,11 +327,7 @@ impl Mikan {
             }
         }
 
-        println!("Anime Name: {}", anime_name);
-        println!("Image URL: {}", img_url);
-        println!("Anime Type: {}", anime_type);
-        println!("Update Day: {}", update_day);
-
+        log::info!("get anime: {}, {}, {}, {}", anime_name, img_url, anime_type, update_day);
         Ok(Anime {
             anime_name: anime_name,
             mikan_id: mikan_id,
