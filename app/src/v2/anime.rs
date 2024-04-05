@@ -630,3 +630,53 @@ fn convert_json_seed_to_anime_seed(sj: SeedRequestJson) -> anime_seed::AnimeSeed
         seed_size: sj.seed_size,
     }
 }
+
+#[get("/detail/{mikan_id}")]
+pub async fn get_anime_detail_handler(
+    pool: web::Data<Pool>,
+    path: web::Path<(i32,)>,
+) -> Result<HttpResponse, Error> {
+    log::info!("get_anime_detail_handler: /detail/{}", path.0);
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "get_anime_detail_handler, failed to get db connection"))?;
+
+    let res = get_anime_detail(db_connection, path.0)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_detail_handler, get_anime_detail failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AnimeDetail {
+    pub anime_info: anime_list::AnimeList,
+    pub seed_info: Vec<anime_seed::AnimeSeed>,
+    pub subgroup_info: Vec<anime_subgroup::AnimeSubgroup>,
+    pub task_info: Vec<anime_task::AnimeTask>,
+}
+async fn get_anime_detail(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    mikan_id: i32,
+) -> Result<AnimeDetail, Error> {
+    let anime = get_anime_info(db_connection, mikan_id)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_detail, get_anime_info failed"))?;
+    let seed_vec = get_anime_seed(db_connection, mikan_id)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_detail, get_anime_seed failed"))?;
+    let subgroup_vec = get_subgroup(db_connection)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_detail, get_subgroup failed"))?;
+    let task_vec = get_task(db_connection, mikan_id)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_detail, get_task failed"))?;
+
+    let anime_detail = AnimeDetail {
+        anime_info: anime,
+        seed_info: seed_vec,
+        subgroup_info: subgroup_vec,
+        task_info: task_vec,
+    };
+    Ok(anime_detail)
+}

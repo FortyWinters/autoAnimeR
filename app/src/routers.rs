@@ -56,6 +56,7 @@ pub fn anime_routes_v2(cfg: &mut web::ServiceConfig) {
             .service(seed_update_handler)
             .service(seed_delete_handler)
             .service(seed_download_handler)
+            .service(get_anime_detail_handler)
     );
 }
 
