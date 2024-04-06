@@ -272,7 +272,7 @@ impl Mikan {
         let mut anime_name = String::new();
         let re = Regex::new(r"url\('([^']+)'\)").unwrap();
         if let Some(node) = document.find(Class("bangumi-title")).next() {
-            anime_name.push_str(&node.text());
+            anime_name.push_str(&node.text().trim_end().to_string());
         }
 
         let mut img_url = String::new();
