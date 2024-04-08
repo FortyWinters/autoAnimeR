@@ -73,3 +73,8 @@ pub fn setting_routes_v2(cfg: &mut web::ServiceConfig) {
             .service(reload_task_handler)
     );
 }
+
+pub fn ws_routes_v2(cfg: &mut web::ServiceConfig) {
+    use crate::v2::ws::*;
+    cfg.service(web::resource("/v2/ws/").route(web::get().to(ws_index)));
+}

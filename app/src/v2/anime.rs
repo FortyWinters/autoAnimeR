@@ -13,7 +13,7 @@ use log;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> actix_web::Error {
+pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> actix_web::Error {
     log::error!("{}, error: {:?}", message, e);
     actix_web::error::ErrorInternalServerError("Internal server error")
 }
@@ -771,3 +771,4 @@ pub async fn task_update(
         })?;
     Ok(())
 }
+
