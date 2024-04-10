@@ -23,6 +23,8 @@ pub async fn add(
                 episode: &item.episode,
                 torrent_name: &item.torrent_name,
                 qb_task_status: &item.qb_task_status,
+                rename_status: &item.rename_status,
+                filename: &item.filename
             };
             insert_into(anime_task)
                 .values(&new_anime_task)
@@ -51,6 +53,8 @@ pub async fn add_bulk(
                 episode: &item.episode,
                 torrent_name: &item.torrent_name,
                 qb_task_status: &item.qb_task_status,
+                rename_status: &item.rename_status,
+                filename: &item.filename
             };
             insert_into(anime_task)
                 .values(&new_anime_task)
@@ -197,6 +201,18 @@ pub async fn get_by_qbtaskstatus(
     Ok(result)
 }
 
+#[allow(dead_code)]
+pub async fn get_by_task_status(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_qbtask_status: i32,
+    query_rename_status: i32,
+) -> Result<Vec<AnimeTask>, diesel::result::Error> {
+    let result: Vec<AnimeTask> = anime_task
+        .filter(qb_task_status.eq(query_qbtask_status))
+        .filter(rename_status.eq(query_rename_status))
+        .load::<AnimeTask>(db_connection)?;
+    Ok(result)
+}
 #[cfg(test)]
 mod test {
     use super::*;
@@ -220,6 +236,8 @@ mod test {
             episode: 1,
             torrent_name: "test_torrent_name".to_string(),
             qb_task_status: 0,
+            rename_status: 0,
+            filename: "test_file_name".to_string()
         };
 
         add(db_connection, &test_anime_task_json).await.unwrap();
@@ -237,16 +255,20 @@ mod test {
         let db_connection = &mut pool.get().unwrap();
         let test_anime_task_json = vec![
             AnimeTaskJson {
-                mikan_id: 123,
-                episode: 114,
+                mikan_id: 3061,
+                episode: 1,
                 torrent_name: "test_torrent_name_1".to_string(),
                 qb_task_status: 0,
+                rename_status: 0,
+                filename: "test_file_name_1".to_string()
             },
             AnimeTaskJson {
-                mikan_id: 123,
-                episode: 514,
+                mikan_id: 114514,
+                episode: 1919810,
                 torrent_name: "test_torrent_name_2".to_string(),
                 qb_task_status: 0,
+                rename_status: 0,
+                filename: "test_file_name_2".to_string()
             },
         ];
         add_bulk(db_connection, &test_anime_task_json)

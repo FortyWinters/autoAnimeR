@@ -7,7 +7,9 @@ pub struct AnimeTask {
     pub mikan_id: i32,
     pub episode: i32,
     pub torrent_name: String,
-    pub qb_task_status: i32
+    pub qb_task_status: i32,
+    pub rename_status: i32,
+    pub filename: String
 }
 
 #[derive(Debug, Insertable)]
@@ -16,7 +18,9 @@ pub struct PostAnimeTask<'a> {
     pub mikan_id: &'a i32,
     pub episode: &'a i32,
     pub torrent_name: &'a str,
-    pub qb_task_status: &'a i32
+    pub qb_task_status: &'a i32,
+    pub rename_status: &'a i32,
+    pub filename: &'a String
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,5 +28,7 @@ pub struct AnimeTaskJson {
     pub mikan_id: i32,
     pub episode: i32,
     pub torrent_name: String,
-    pub qb_task_status: i32
+    pub qb_task_status: i32,
+    pub rename_status: i32,
+    pub filename: String
 }

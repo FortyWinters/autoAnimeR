@@ -59,6 +59,8 @@ diesel::table! {
         episode -> Integer,
         torrent_name -> Text,
         qb_task_status -> Integer,
+        rename_status -> Integer,
+        filename -> Text,
     }
 }
 

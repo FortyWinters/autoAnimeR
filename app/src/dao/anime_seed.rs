@@ -214,7 +214,7 @@ pub async fn get_anime_seed_by_seed_url(
     item: String, // seed_url
 ) -> Result<AnimeSeed, diesel::result::Error> {
     match anime_seed
-        .filter(seed_url.eq(&item))
+        .filter(seed_url.like(&item))
         .first::<AnimeSeed>(db_connection)
     {
         Ok(result) => Ok(result),

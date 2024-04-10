@@ -1,10 +1,11 @@
-use crate::models::anime_seed::AnimeSeed;
 use crate::error::error::AnimeError;
+use crate::models::anime_seed::AnimeSeed;
 use chrono::DateTime;
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::time::{Duration, UNIX_EPOCH};
+use std::collections::HashSet;
 #[derive(Debug, Clone)]
 pub struct QbitTaskExecutor {
     pub qbt_client: reqwest::Client,
@@ -109,6 +110,8 @@ impl QbitTaskExecutor {
             .next()
             .unwrap_or(&anime_seed_info.seed_url)
             .to_string();
+
+        println!("{}", anime_seed_info.seed_name);
 
         let seed_path = format!("downloads/seed/{}/{}", anime_seed_info.mikan_id, file_name);
         let file_byte = std::fs::read(seed_path).unwrap();
@@ -286,6 +289,43 @@ impl QbitTaskExecutor {
         Ok(torrent_hash_list)
     }
 
+    pub async fn qb_api_completed_torrent_set(&self) -> Result<HashSet<String>, AnimeError> {
+        let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
+        let mut torrent_hash_set: HashSet<String> = HashSet::new();
+
+        if let Ok(completed_torrent_response) = self
+            .qbt_client
+            .post(torrent_info_endpoint.clone())
+            .header("Cookie", &self.cookie)
+            .form(&[("filter", "completed")])
+            .send()
+            .await
+        {
+            let completed_torrent_response_text = completed_torrent_response.text().await.unwrap();
+            let json: serde_json::Value =
+                serde_json::from_str(&completed_torrent_response_text).unwrap();
+
+            if let serde_json::Value::Array(torrents) = json {
+                for torrent in torrents {
+                    torrent_hash_set.insert(
+                        torrent["hash"]
+                            .as_str()
+                            .ok_or("Field not found")
+                            .unwrap()
+                            .to_string()
+                            + ".torrent",
+                    );
+                }
+            }
+        } else {
+            log::info!(
+                "[QB API] Unable to access qb web api: {}",
+                torrent_info_endpoint
+            );
+        }
+        Ok(torrent_hash_set)
+    }
+
     pub async fn qb_api_get_download_path(&self) -> Result<String, AnimeError> {
         let app_info_endpoint = self.host.clone() + "api/v2/app/preferences";
         let mut download_path = String::from("");
@@ -460,5 +500,13 @@ mod test {
         let _r = qb_task_executor.qb_api_get_download_path().await.unwrap();
 
         println!("{:?}", r.len())
+    }
+
+    #[tokio::test]
+    async fn test() {
+        let _qb_task_executor =
+            QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
+                .await
+                .unwrap();
     }
 }

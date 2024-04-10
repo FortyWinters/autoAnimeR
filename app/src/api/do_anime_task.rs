@@ -1,12 +1,12 @@
 use crate::api::spider_task::do_spider_task;
 use crate::dao;
-use crate::dao::anime_seed::get_anime_seed_by_mikan_id;
 use crate::models::anime_list::AnimeListJson;
 use crate::models::anime_seed::AnimeSeed;
-use crate::models::anime_task::AnimeTaskJson;
+use crate::models::anime_task::{AnimeTask, AnimeTaskJson};
 use crate::mods::anime_filter;
 use crate::mods::qb_api::QbitTaskExecutor;
 use crate::mods::spider::Mikan;
+
 use anyhow::Error;
 use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::PooledConnection;
@@ -14,10 +14,18 @@ use diesel::SqliteConnection;
 use futures::future::join_all;
 use log;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
+use serde_json;
 use std::collections::HashSet;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::sync::RwLock as TokioRwLock;
-use tokio::time::{self, Duration};
+use tokio::time::{self, sleep, Duration};
+
+use std::collections::HashMap;
+use std::fs;
+use std::fs::{File, OpenOptions};
+use std::io::prelude::*;
+use std::io::{self, Read, Write};
 
 #[allow(dead_code)]
 pub enum DownloadSeedStatus {
@@ -117,6 +125,8 @@ pub async fn create_anime_task_by_seed(
                     .unwrap_or(&anime_seed.seed_url)
                     .to_string(),
                 qb_task_status: 0,
+                rename_status: 0,
+                filename: "".to_string(),
             };
             dao::anime_task::add(db_connection, &anime_task_info)
                 .await
@@ -141,8 +151,11 @@ pub async fn create_anime_task_from_exist_files(
     for file in files {
         let file = file?;
         let filename = file.file_name().to_string_lossy().to_string();
+        // println!("{}", filename);
+        if filename == "seed" || filename == ".DS_Store" {
+            continue;
+        }
 
-        println!("{}", filename);
         let mikan_id: i32;
         let mikan = Mikan::new().unwrap();
 
@@ -150,20 +163,21 @@ pub async fn create_anime_task_from_exist_files(
         if let Some(captures) = re.captures(filename.as_str()) {
             if let Some(number_str) = captures.get(1) {
                 mikan_id = number_str.as_str().parse::<i32>().unwrap();
-                println!("{}", mikan_id);
+                // println!("{}", mikan_id);
             } else {
                 continue;
             }
         } else {
             continue;
         }
-        if filename == "seed" || filename == ".DS_Store" {
-            continue;
-        }
+
         for each_episode_file in file.path().read_dir()? {
             let each_episode = each_episode_file?.file_name().to_string_lossy().to_string();
             let parts: Vec<&str> = each_episode.split(" - ").collect();
-
+            if parts.len() == 1 {
+                log::info!("fail to get anime info by file name: {}", parts[0]);
+                continue;
+            }
             if let Ok(mikan_id) =
                 dao::anime_list::get_mikanid_by_anime_name(&parts[0].to_string(), db_connection)
                     .await
@@ -173,6 +187,8 @@ pub async fn create_anime_task_from_exist_files(
                     episode: parts[1].parse::<i32>().unwrap(),
                     torrent_name: "unknow - ".to_string() + &each_episode,
                     qb_task_status: 1,
+                    rename_status: 0,
+                    filename: "".to_string(),
                 };
                 dao::anime_task::add(db_connection, &anime_task)
                     .await
@@ -182,6 +198,7 @@ pub async fn create_anime_task_from_exist_files(
                     anime_task
                 );
             } else {
+                println!("{:?}", parts);
                 log::info!(
                     "faile to find anime from anime list, try to update anime list ,anime_name: {}, episode: {}",
                     parts[0],
@@ -215,6 +232,8 @@ pub async fn create_anime_task_from_exist_files(
                     episode: parts[1].parse::<i32>().unwrap(),
                     torrent_name: "unknow - ".to_string() + &each_episode,
                     qb_task_status: 1,
+                    rename_status: 0,
+                    filename: "".to_string(),
                 };
                 dao::anime_task::add(db_connection, &anime_task)
                     .await
@@ -294,6 +313,8 @@ pub async fn filter_and_download(
                 .unwrap_or(&anime_seed.seed_url)
                 .to_string(),
             qb_task_status: 0,
+            rename_status: 0,
+            filename: "".to_string(),
         })
     }
 
@@ -322,23 +343,24 @@ pub async fn create_qb_task(
         .unwrap()
         .anime_name;
 
-    let subgroup_name =
-        dao::anime_subgroup::get_by_subgroupid(db_connection, &anime_seed.subgroup_id)
-            .await
-            .unwrap()
-            .subgroup_name;
+    // let subgroup_name =
+    //     dao::anime_subgroup::get_by_subgroupid(db_connection, &anime_seed.subgroup_id)
+    //         .await
+    //         .unwrap()
+    //         .subgroup_name;
 
     qb_task_executor
         .qb_api_add_torrent(&anime_name, &anime_seed)
         .await
         .unwrap();
-    qb_task_executor
-        .qb_api_torrent_rename_file(&anime_name, &subgroup_name, &anime_seed)
-        .await
-        .unwrap();
+    // qb_task_executor
+    //     .qb_api_torrent_rename_file(&anime_name, &subgroup_name, &anime_seed)
+    //     .await
+    //     .unwrap();
     Ok(())
 }
 
+// This is a ugly failure.
 #[allow(dead_code)]
 pub async fn update_qb_task_status(
     qb_task_executor: &QbitTaskExecutor,
@@ -470,48 +492,190 @@ pub async fn get_task_status(status: &Arc<TokioRwLock<bool>>) -> Result<bool, Er
     Ok(val)
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VideoConfig {
+    pub torrent_hash: String,
+    pub mikan_id: i32,
+    pub episode: i32,
+}
+
+#[allow(dead_code)]
+pub async fn auto_update_and_rename(
+    video_file_lock: Arc<TokioRwLock<bool>>,
+    qb_task_executor: &QbitTaskExecutor,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) {
+    loop {
+        println!("Periodic task executed!");
+        let nb_new_finished_task = auto_update_anime_task_handler(qb_task_executor, db_connection)
+            .await
+            .unwrap();
+
+        // Always do rename task currently, maybe changed in some days.
+        if nb_new_finished_task > -1 {
+            auto_rename_handler(video_file_lock.clone(), qb_task_executor, db_connection).await;
+        }
+        sleep(Duration::from_secs(5)).await;
+    }
+}
+
+pub async fn auto_update_anime_task_handler(
+    qb_task_executor: &QbitTaskExecutor,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<i32, Error> {
+    let finished_task_set = qb_task_executor
+        .qb_api_completed_torrent_set()
+        .await
+        .unwrap();
+    let under_update_task_list = dao::anime_task::get_by_qbtaskstatus(db_connection, 0)
+        .await
+        .unwrap();
+    let mut task_cnt = 0;
+
+    for task in under_update_task_list {
+        if finished_task_set.contains(&task.torrent_name) {
+            println!("{}", task.torrent_name);
+            dao::anime_task::update_qb_task_status(db_connection, task.torrent_name.to_string())
+                .await
+                .unwrap();
+            task_cnt += 1;
+            log::info!("update torrent: {} download status", task.torrent_name);
+        }
+    }
+    Ok(task_cnt)
+}
+
+#[allow(dead_code)]
+pub async fn auto_rename_handler(
+    video_file_lock: Arc<TokioRwLock<bool>>,
+    qb_task_executor: &QbitTaskExecutor,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) {
+    let _guard = video_file_lock.write().await; // 获取写锁
+
+    let download_path = qb_task_executor.qb_api_get_download_path().await.unwrap();
+    let video_config_path = format!("{}/.videoConfig.json", download_path);
+
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(video_config_path)
+        .unwrap();
+
+    let mut contents = String::new();
+    let _ = file.read_to_string(&mut contents);
+
+    if contents.trim().is_empty() {
+        contents = "{}".to_string();
+    }
+
+    let mut video_config: HashMap<String, VideoConfig> = serde_json::from_str(&contents).unwrap();
+    println!("{:?}", video_config);
+
+    let task_list = dao::anime_task::get_by_task_status(db_connection, 1, 0)
+        .await
+        .unwrap();
+
+    println!("{:?}", task_list);
+
+
+    for task in task_list {
+        let (cur_file_name, cur_config) = rename_file(qb_task_executor, db_connection, &task)
+        .await
+        .unwrap();
+        video_config.insert(cur_file_name, cur_config);
+    }
+
+    file.seek(std::io::SeekFrom::Start(0)).unwrap();
+    file.set_len(0).unwrap(); 
+    file.write_all(
+        serde_json::to_string_pretty(&video_config)
+            .unwrap()
+            .as_bytes(),
+    )
+    .unwrap();
+}
+
+#[allow(dead_code)]
+pub async fn rename_file(
+    qb_task_executor: &QbitTaskExecutor,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    anime_task: &AnimeTask,
+) -> Result<(String, VideoConfig), Error> {
+    let path = qb_task_executor.qb_api_get_download_path().await.unwrap();
+    let anime_name = dao::anime_list::get_by_mikanid(db_connection, anime_task.mikan_id)
+        .await
+        .unwrap()
+        .anime_name;
+
+    let file_name = qb_task_executor
+        .qb_api_torrent_info(&anime_task.torrent_name)
+        .await
+        .unwrap()
+        .name;
+
+    // Total name: path/anime_name(mikan_id)/video_name.mp4
+    let total_path = format!(
+        "{}/{}({})/{}",
+        path, anime_name, anime_task.mikan_id, file_name
+    );
+    println!("total_path: {}", total_path);
+
+    let extension = match file_name.rsplit('.').next() {
+        Some(ext) => ext,
+        None => "mp4",
+    };
+    println!("extension: {}", extension);
+
+    let quary_item = format!("%{}", anime_task.torrent_name);
+    let subgroup_id = dao::anime_seed::get_anime_seed_by_seed_url(db_connection, quary_item)
+        .await
+        .unwrap()
+        .subgroup_id;
+
+    let subgroup = dao::anime_subgroup::get_by_subgroupid(db_connection, &subgroup_id)
+        .await
+        .unwrap()
+        .subgroup_name;
+
+    let new_file_name = format!(
+        "{} - {} - {}.{}",
+        anime_name, anime_task.episode, subgroup, extension
+    );
+    let new_total_path = format!(
+        "{}/{}({})/{}",
+        path, anime_name, anime_task.mikan_id, new_file_name
+    );
+
+    println!(
+        "old file name: {}, new file name: {}",
+        total_path, new_total_path
+    );
+    // fs::rename(total_path, new_total_path)?;
+
+    Ok((
+        new_file_name,
+        VideoConfig {
+            torrent_hash: anime_task
+                .torrent_name
+                .split('.')
+                .next()
+                .unwrap()
+                .to_string(),
+            mikan_id: anime_task.mikan_id,
+            episode: anime_task.episode,
+        },
+    ))
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::api::anime;
     use crate::Pool;
 
     #[tokio::test]
-    pub async fn test_create_anime_task() {
-        dotenv::dotenv().ok();
-        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-        let database_pool = Pool::builder()
-            .build(ConnectionManager::<SqliteConnection>::new(database_url))
-            .expect("Failed to create pool.");
-
-        let qb_task_executor =
-            QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
-                .await
-                .unwrap();
-
-        let db_connection = &mut database_pool.get().unwrap();
-        let mikan = Mikan::new().unwrap();
-        // reset
-        dao::anime_seed::delete_all(db_connection).await.unwrap();
-        dao::anime_task::delete_all(db_connection).await.unwrap();
-
-        let anime_list_vec = dao::anime_list::get_by_subscribestatus(db_connection, 1)
-            .await
-            .unwrap();
-
-        for anime_list in &anime_list_vec {
-            let _r = anime::get_anime_seed(anime_list.mikan_id, db_connection)
-                .await
-                .unwrap();
-        }
-
-        let _r = create_anime_task_bulk(&mikan, &qb_task_executor, db_connection)
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    pub async fn test_create_anime_task_from_exist_files() {
+    pub async fn test() {
         dotenv::dotenv().ok();
         let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let database_pool = Pool::builder()
@@ -523,5 +687,8 @@ mod test {
             QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
                 .await
                 .unwrap();
+
+        let video_file_lock = Arc::new(TokioRwLock::new(false));
+        auto_update_and_rename(video_file_lock.clone(), &qb_task_executor, db_connection).await;
     }
 }
