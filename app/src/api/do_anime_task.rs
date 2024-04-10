@@ -22,10 +22,9 @@ use tokio::sync::RwLock as TokioRwLock;
 use tokio::time::{self, sleep, Duration};
 
 use std::collections::HashMap;
-use std::fs;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::prelude::*;
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 
 #[allow(dead_code)]
 pub enum DownloadSeedStatus {
