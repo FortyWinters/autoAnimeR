@@ -1,12 +1,12 @@
 use actix_files::Files;
 use actix_web::{web, App, HttpServer};
+use api::do_anime_task;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
 use mods::qb_api::QbitTaskExecutor;
 use routers::*;
 use tera::Tera;
 
-mod v2;
 mod api;
 mod dao;
 mod error;
@@ -14,6 +14,8 @@ mod models;
 mod mods;
 mod routers;
 mod schema;
+mod v2;
+use actix::spawn;
 use log4rs;
 use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
@@ -47,10 +49,12 @@ async fn main() -> std::io::Result<()> {
         .expect("Failed to create qb client");
 
     let tastk_status = Arc::new(TokioRwLock::new(false));
+    let video_file_lock = Arc::new(TokioRwLock::new(false));
 
-    HttpServer::new(move || {
+    let database_pool_for_server = database_pool.clone();
+    let http_server = HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(database_pool.clone()))
+            .app_data(web::Data::new(database_pool_for_server.clone()))
             .app_data(web::Data::new(tera.clone()))
             .app_data(web::Data::new(qb.clone()))
             .app_data(web::Data::new(tastk_status.clone()))
@@ -63,6 +67,12 @@ async fn main() -> std::io::Result<()> {
             .configure(ws_routes_v2)
     })
     .bind(("0.0.0.0", 8080))?
-    .run()
-    .await
+    .run();
+
+    let database_pool_for_task = database_pool.clone();
+    spawn(async move {
+        let _ = do_anime_task::auto_update_and_rename(video_file_lock, database_pool_for_task).await;
+    });
+
+    http_server.await
 }

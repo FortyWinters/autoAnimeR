@@ -8,7 +8,9 @@ use crate::mods::qb_api::QbitTaskExecutor;
 use crate::mods::spider::Mikan;
 
 use anyhow::Error;
+// use actix_web::Error;
 use diesel::r2d2::ConnectionManager;
+use diesel::r2d2::Pool;
 use diesel::r2d2::PooledConnection;
 use diesel::SqliteConnection;
 use futures::future::join_all;
@@ -17,14 +19,19 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
 use tokio::time::{self, sleep, Duration};
-
+use std::fs;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::io::{Read, Write};
+
+pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> anyhow::Error {
+    log::error!("{}, error: {:?}", message, e);
+    Error::msg("Internal server error")
+}
 
 #[allow(dead_code)]
 pub enum DownloadSeedStatus {
@@ -130,14 +137,13 @@ pub async fn create_anime_task_by_seed(
             dao::anime_task::add(db_connection, &anime_task_info)
                 .await
                 .unwrap();
-            Ok(
-                create_qb_task(&qb_task_executor, db_connection, &anime_seed)
-                    .await
-                    .unwrap(),
-            )
+            create_qb_task(&qb_task_executor, db_connection, &anime_seed)
+                .await
+                .unwrap();
         }
-        DownloadSeedStatus::FAILED(_) => Err(Error::msg("message")),
+        DownloadSeedStatus::FAILED(_) => {}
     }
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -501,18 +507,23 @@ pub struct VideoConfig {
 #[allow(dead_code)]
 pub async fn auto_update_and_rename(
     video_file_lock: Arc<TokioRwLock<bool>>,
-    qb_task_executor: &QbitTaskExecutor,
-    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-) {
-    loop {
-        println!("Periodic task executed!");
-        let nb_new_finished_task = auto_update_anime_task_handler(qb_task_executor, db_connection)
+    pool: Pool<ConnectionManager<SqliteConnection>>,
+) -> Result<(), Error> {
+    let qb_task_executor =
+        QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
             .await
-            .unwrap();
+            .expect("Failed to create qb client");
+    let db_connection = &mut pool.get().unwrap();
+
+    log::info!("Start auto rename and update thread");
+    loop {
+        let nb_new_finished_task = auto_update_anime_task_handler(&qb_task_executor, db_connection)
+            .await
+            .map_err(|e| handle_error(e, "Failed to get finished task"))?;
 
         // Always do rename task currently, maybe changed in some days.
         if nb_new_finished_task > -1 {
-            auto_rename_handler(video_file_lock.clone(), qb_task_executor, db_connection).await;
+            auto_rename_handler(video_file_lock.clone(), &qb_task_executor, db_connection).await?;
         }
         sleep(Duration::from_secs(5)).await;
     }
@@ -528,7 +539,8 @@ pub async fn auto_update_anime_task_handler(
         .unwrap();
     let under_update_task_list = dao::anime_task::get_by_qbtaskstatus(db_connection, 0)
         .await
-        .unwrap();
+        .map_err(|e| handle_error(e, "Failed to get task list"))?;
+
     let mut task_cnt = 0;
 
     for task in under_update_task_list {
@@ -536,7 +548,7 @@ pub async fn auto_update_anime_task_handler(
             println!("{}", task.torrent_name);
             dao::anime_task::update_qb_task_status(db_connection, task.torrent_name.to_string())
                 .await
-                .unwrap();
+                .map_err(|e| handle_error(e, "failed to access anime_task table"))?;
             task_cnt += 1;
             log::info!("update torrent: {} download status", task.torrent_name);
         }
@@ -549,7 +561,7 @@ pub async fn auto_rename_handler(
     video_file_lock: Arc<TokioRwLock<bool>>,
     qb_task_executor: &QbitTaskExecutor,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-) {
+) -> Result<(), Error> {
     let _guard = video_file_lock.write().await; // 获取写锁
 
     let download_path = qb_task_executor.qb_api_get_download_path().await.unwrap();
@@ -560,7 +572,7 @@ pub async fn auto_rename_handler(
         .write(true)
         .create(true)
         .open(video_config_path)
-        .unwrap();
+        .map_err(|e| handle_error(e, "Failed to create video config file."))?;
 
     let mut contents = String::new();
     let _ = file.read_to_string(&mut contents);
@@ -569,31 +581,32 @@ pub async fn auto_rename_handler(
         contents = "{}".to_string();
     }
 
-    let mut video_config: HashMap<String, VideoConfig> = serde_json::from_str(&contents).unwrap();
-    println!("{:?}", video_config);
+    let mut video_config: HashMap<String, VideoConfig> = serde_json::from_str(&contents)
+        .map_err(|e| handle_error(e, "Failed to convert vedio config file from bytes to json"))?;
+    log::debug!("{:?}", video_config);
 
     let task_list = dao::anime_task::get_by_task_status(db_connection, 1, 0)
         .await
-        .unwrap();
+        .map_err(|e| handle_error(e, "Failed to get anime task by task status."))?;
 
-    println!("{:?}", task_list);
-
+    log::debug!("{:?}", task_list);
 
     for task in task_list {
         let (cur_file_name, cur_config) = rename_file(qb_task_executor, db_connection, &task)
-        .await
-        .unwrap();
+            .await
+            .map_err(|e| handle_error(e, "Faile to call rename_file"))?;
         video_config.insert(cur_file_name, cur_config);
     }
 
     file.seek(std::io::SeekFrom::Start(0)).unwrap();
-    file.set_len(0).unwrap(); 
+    file.set_len(0).unwrap();
     file.write_all(
         serde_json::to_string_pretty(&video_config)
             .unwrap()
             .as_bytes(),
     )
-    .unwrap();
+    .map_err(|e| handle_error(e, "Failed to update video config file."))?;
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -602,16 +615,25 @@ pub async fn rename_file(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     anime_task: &AnimeTask,
 ) -> Result<(String, VideoConfig), Error> {
-    let path = qb_task_executor.qb_api_get_download_path().await.unwrap();
+    let path = qb_task_executor
+        .qb_api_get_download_path()
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "Faile to get download path, please check your qbittorrent client config",
+            )
+        })?;
+
     let anime_name = dao::anime_list::get_by_mikanid(db_connection, anime_task.mikan_id)
         .await
-        .unwrap()
+        .map_err(|e| handle_error(e, "Failed to get anime name."))?
         .anime_name;
 
     let file_name = qb_task_executor
         .qb_api_torrent_info(&anime_task.torrent_name)
         .await
-        .unwrap()
+        .map_err(|e| handle_error(e, "Failed to get original video name."))?
         .name;
 
     // Total name: path/anime_name(mikan_id)/video_name.mp4
@@ -619,23 +641,23 @@ pub async fn rename_file(
         "{}/{}({})/{}",
         path, anime_name, anime_task.mikan_id, file_name
     );
-    println!("total_path: {}", total_path);
+    log::debug!("total_path: {}", total_path);
 
     let extension = match file_name.rsplit('.').next() {
         Some(ext) => ext,
         None => "mp4",
     };
-    println!("extension: {}", extension);
+    log::debug!("extension: {}", extension);
 
     let quary_item = format!("%{}", anime_task.torrent_name);
     let subgroup_id = dao::anime_seed::get_anime_seed_by_seed_url(db_connection, quary_item)
         .await
-        .unwrap()
+        .map_err(|e| handle_error(e, "Failed to get subgroup_id"))?
         .subgroup_id;
 
     let subgroup = dao::anime_subgroup::get_by_subgroupid(db_connection, &subgroup_id)
         .await
-        .unwrap()
+        .map_err(|e| handle_error(e, "Failed to get subgroup name"))?
         .subgroup_name;
 
     let new_file_name = format!(
@@ -647,11 +669,13 @@ pub async fn rename_file(
         path, anime_name, anime_task.mikan_id, new_file_name
     );
 
-    println!(
+    log::info!(
         "old file name: {}, new file name: {}",
-        total_path, new_total_path
+        total_path,
+        new_total_path
     );
-    // fs::rename(total_path, new_total_path)?;
+
+    fs::rename(total_path, new_total_path)?;
 
     Ok((
         new_file_name,
@@ -681,13 +705,12 @@ mod test {
             .build(ConnectionManager::<SqliteConnection>::new(database_url))
             .expect("Failed to create pool.");
 
-        let db_connection = &mut database_pool.get().unwrap();
-        let qb_task_executor =
+        let _qb_task_executor =
             QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
                 .await
                 .unwrap();
 
         let video_file_lock = Arc::new(TokioRwLock::new(false));
-        auto_update_and_rename(video_file_lock.clone(), &qb_task_executor, db_connection).await;
+        let _ = auto_update_and_rename(video_file_lock.clone(), database_pool).await;
     }
 }

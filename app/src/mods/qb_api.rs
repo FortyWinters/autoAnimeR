@@ -91,10 +91,10 @@ impl QbitTaskExecutor {
                 "[QB API] Unable to access qb web api: {}",
                 torrent_info_endpoint
             );
-            Err(AnimeError::new(format!(
-                "[QB API] Unable to access qb web api: {}",
-                torrent_info_endpoint,
-            )))
+                Err(AnimeError::new(format!(
+                    "[QB API] Unable to access qb web api: {}",
+                    torrent_info_endpoint,
+                )))
         }
     }
 
