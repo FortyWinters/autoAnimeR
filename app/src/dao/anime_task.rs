@@ -156,6 +156,25 @@ pub async fn update_qb_task_status(
     Ok(())
 }
 
+#[allow(dead_code)]
+pub async fn update_task_status(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    item: &String, // torrent_name
+    new_qb_status: i32,
+    new_rename_status: i32,
+) -> Result<(), diesel::result::Error> {
+    if let Ok(_) = anime_task
+        .filter(torrent_name.like(&item))
+        .first::<AnimeTask>(db_connection)
+    {
+        update(anime_task.filter(torrent_name.like(&item)))
+            .set((qb_task_status.eq(new_qb_status), rename_status.eq(new_rename_status)))
+            .execute(db_connection)
+            .expect("save failed");
+    }
+    Ok(())
+}
+
 // query all data from anime_task
 pub async fn get_all(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,

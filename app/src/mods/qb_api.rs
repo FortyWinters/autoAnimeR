@@ -4,8 +4,14 @@ use chrono::DateTime;
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::time::{Duration, UNIX_EPOCH};
 use std::collections::HashSet;
+use std::time::{Duration, UNIX_EPOCH};
+
+pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> AnimeError {
+    log::error!("{}, error: {:?}", message, e);
+    AnimeError::new("Internal error".to_string())
+}
+
 #[derive(Debug, Clone)]
 pub struct QbitTaskExecutor {
     pub qbt_client: reqwest::Client,
@@ -84,17 +90,22 @@ impl QbitTaskExecutor {
             let torrent_info_response_text = torrent_info_response.text().await.unwrap();
             let json: serde_json::Value =
                 serde_json::from_str(&torrent_info_response_text).unwrap();
-            let torrent_info = TorrentInfo::new(&json[0]).unwrap();
+            let torrent_info = TorrentInfo::new(&json[0]).map_err(|e| {
+                handle_error(
+                    e,
+                    format!("Failed to construct new object by [{}] ", torrent_name).as_str(),
+                )
+            })?;
             Ok(torrent_info)
         } else {
             log::info!(
                 "[QB API] Unable to access qb web api: {}",
                 torrent_info_endpoint
             );
-                Err(AnimeError::new(format!(
-                    "[QB API] Unable to access qb web api: {}",
-                    torrent_info_endpoint,
-                )))
+            Err(AnimeError::new(format!(
+                "[QB API] Unable to access qb web api: {}",
+                torrent_info_endpoint,
+            )))
         }
     }
 
@@ -265,8 +276,17 @@ impl QbitTaskExecutor {
             .await
         {
             let completed_torrent_response_text = completed_torrent_response.text().await.unwrap();
-            let json: serde_json::Value =
-                serde_json::from_str(&completed_torrent_response_text).unwrap();
+            let json: serde_json::Value = serde_json::from_str(&completed_torrent_response_text)
+                .map_err(|e| {
+                    handle_error(
+                        e,
+                        format!(
+                            "Failed to serialize {:?}",
+                            completed_torrent_response_text
+                        )
+                        .as_str(),
+                    )
+                })?;
 
             if let serde_json::Value::Array(torrents) = json {
                 for torrent in torrents {
@@ -364,7 +384,10 @@ pub struct TorrentInfo {
 
 impl TorrentInfo {
     pub fn new(item: &serde_json::Value) -> Result<Self, AnimeError> {
-        let item_size = item["size"].as_i64().ok_or("Field not found").unwrap();
+        let item_size = item["size"]
+            .as_i64()
+            .ok_or("Field not found")
+            .map_err(|e| handle_error(e, "No item named 'size' "))?;
 
         const GB: i64 = 1024 * 1024 * 1024;
         const MB: i64 = 1024 * 1024;

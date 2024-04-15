@@ -18,15 +18,15 @@ use log;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::collections::HashSet;
-use std::sync::Arc;
-use tokio::sync::RwLock as TokioRwLock;
-use tokio::time::{self, sleep, Duration};
-use std::fs;
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::fs;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::io::{Read, Write};
+use std::sync::Arc;
+use tokio::sync::RwLock as TokioRwLock;
+use tokio::time::{self, sleep, Duration};
 
 pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> anyhow::Error {
     log::error!("{}, error: {:?}", message, e);
@@ -521,9 +521,9 @@ pub async fn auto_update_and_rename(
             .await
             .map_err(|e| handle_error(e, "Failed to get finished task"))?;
 
-        // Always do rename task currently, maybe changed in some days.
-        if nb_new_finished_task > -1 {
-            auto_rename_handler(video_file_lock.clone(), &qb_task_executor, db_connection).await?;
+        if nb_new_finished_task > 0 {
+            let _ = auto_rename_handler(video_file_lock.clone(), &qb_task_executor, db_connection)
+                .await;
         }
         sleep(Duration::from_secs(5)).await;
     }
@@ -545,7 +545,7 @@ pub async fn auto_update_anime_task_handler(
 
     for task in under_update_task_list {
         if finished_task_set.contains(&task.torrent_name) {
-            println!("{}", task.torrent_name);
+            // println!("{}", task.torrent_name);
             dao::anime_task::update_qb_task_status(db_connection, task.torrent_name.to_string())
                 .await
                 .map_err(|e| handle_error(e, "failed to access anime_task table"))?;
@@ -592,10 +592,25 @@ pub async fn auto_rename_handler(
     log::debug!("{:?}", task_list);
 
     for task in task_list {
-        let (cur_file_name, cur_config) = rename_file(qb_task_executor, db_connection, &task)
-            .await
-            .map_err(|e| handle_error(e, "Faile to call rename_file"))?;
-        video_config.insert(cur_file_name, cur_config);
+        if let Ok((cur_file_name, cur_config)) =
+            rename_file(qb_task_executor, db_connection, &task).await
+        {
+            video_config.insert(cur_file_name, cur_config);
+            dao::anime_task::update_task_status(db_connection, &task.torrent_name, 1, 1)
+                .await
+                .map_err(|e| {
+                    handle_error(
+                        e,
+                        format!(
+                            "Failed to update task status for anime_task: {:?}",
+                            task
+                        )
+                        .as_str(),
+                    )
+                })?;
+        } else {
+            log::info!("Failed to execute rename task for anime_task: {:?}", task);
+        }
     }
 
     file.seek(std::io::SeekFrom::Start(0)).unwrap();
@@ -630,11 +645,15 @@ pub async fn rename_file(
         .map_err(|e| handle_error(e, "Failed to get anime name."))?
         .anime_name;
 
+    // println!("{:?}", anime_task.torrent_name);
     let file_name = qb_task_executor
         .qb_api_torrent_info(&anime_task.torrent_name)
         .await
         .map_err(|e| handle_error(e, "Failed to get original video name."))?
         .name;
+    if file_name.len() == 0 {
+        return Err(Error::msg("Failed to get original video name."));
+    }
 
     // Total name: path/anime_name(mikan_id)/video_name.mp4
     let total_path = format!(
@@ -659,6 +678,9 @@ pub async fn rename_file(
         .await
         .map_err(|e| handle_error(e, "Failed to get subgroup name"))?
         .subgroup_name;
+    if file_name.len() == 0 {
+        return Err(Error::msg("Failed to get subgroup name."));
+    }
 
     let new_file_name = format!(
         "{} - {} - {}.{}",
@@ -675,7 +697,7 @@ pub async fn rename_file(
         new_total_path
     );
 
-    fs::rename(total_path, new_total_path)?;
+    let _ = fs::rename(total_path, new_total_path);
 
     Ok((
         new_file_name,
