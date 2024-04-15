@@ -9,19 +9,15 @@ use crate::mods::spider::Mikan;
 
 use anyhow::Error;
 // use actix_web::Error;
-use diesel::r2d2::ConnectionManager;
-use diesel::r2d2::Pool;
-use diesel::r2d2::PooledConnection;
+use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::SqliteConnection;
 use futures::future::join_all;
 use log;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::fs;
-use std::fs::OpenOptions;
+use std::collections::{HashMap, HashSet};
+use std::fs::{self, File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{Read, Write};
 use std::sync::Arc;
@@ -146,18 +142,52 @@ pub async fn create_anime_task_by_seed(
     Ok(())
 }
 
+async fn get_video_config(
+    download_path: &String,
+) -> Result<(File, HashMap<String, VideoConfig>), Error> {
+    let video_config_path = format!("{}/.videoConfig.json", download_path);
+
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(video_config_path)
+        .map_err(|e| handle_error(e, "Failed to create video config file."))?;
+
+    let mut contents = String::new();
+    let _ = file.read_to_string(&mut contents);
+
+    if contents.trim().is_empty() {
+        contents = "{}".to_string();
+    }
+
+    let video_config: HashMap<String, VideoConfig> = serde_json::from_str(&contents)
+        .map_err(|e| handle_error(e, "Failed to convert vedio config file from bytes to json"))?;
+    log::debug!("{:?}", video_config);
+
+    Ok((file, video_config))
+}
+
 #[allow(dead_code)]
 pub async fn create_anime_task_from_exist_files(
+    video_file_lock: &Arc<TokioRwLock<bool>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     qb_task_executor: &QbitTaskExecutor,
 ) -> Result<(), Error> {
-    let path = qb_task_executor.qb_api_get_download_path().await.unwrap();
-    let files = std::fs::read_dir(path).unwrap();
+    let _guard = video_file_lock.read().await; // 获取写锁
+
+    let download_path = qb_task_executor.qb_api_get_download_path().await.unwrap();
+    let (_, video_config) = get_video_config(&download_path)
+        .await
+        .map_err(|e| handle_error(e, "Failed to get video config"))?;
+
+    let files = std::fs::read_dir(download_path).unwrap();
+
     for file in files {
         let file = file?;
         let filename = file.file_name().to_string_lossy().to_string();
         // println!("{}", filename);
-        if filename == "seed" || filename == ".DS_Store" {
+        if filename == "seed" || filename == ".DS_Store" || filename == ".videoConfig.json" {
             continue;
         }
 
@@ -173,27 +203,40 @@ pub async fn create_anime_task_from_exist_files(
                 continue;
             }
         } else {
+            log::info!("Failed to get mikan id, file name: [{}]", filename);
             continue;
         }
 
-        for each_episode_file in file.path().read_dir()? {
-            let each_episode = each_episode_file?.file_name().to_string_lossy().to_string();
-            let parts: Vec<&str> = each_episode.split(" - ").collect();
+        for video in file.path().read_dir()? {
+            let video = video?.file_name().to_string_lossy().to_string();
+            let parts: Vec<&str> = video.split(" - ").collect();
             if parts.len() == 1 {
-                log::info!("fail to get anime info by file name: {}", parts[0]);
+                log::info!("File name error, {}", parts[0]);
                 continue;
             }
-            if let Ok(mikan_id) =
+
+            let cur_video_config: &VideoConfig;
+            if let Ok(cfg) = video_config.get(&video).ok_or("error") {
+                cur_video_config = cfg;
+            } else {
+                log::info!(
+                    "Failed to get anime info from video config file, anime name: [{}]",
+                    video
+                );
+                continue;
+            }
+
+            if let Ok(_) =
                 dao::anime_list::get_mikanid_by_anime_name(&parts[0].to_string(), db_connection)
                     .await
             {
                 let anime_task = AnimeTaskJson {
                     mikan_id,
-                    episode: parts[1].parse::<i32>().unwrap(),
-                    torrent_name: "unknow - ".to_string() + &each_episode,
+                    episode: cur_video_config.episode,
+                    torrent_name: format!("{}.torrent", cur_video_config.torrent_hash),
                     qb_task_status: 1,
-                    rename_status: 0,
-                    filename: "".to_string(),
+                    rename_status: 1,
+                    filename: video,
                 };
                 dao::anime_task::add(db_connection, &anime_task)
                     .await
@@ -203,9 +246,8 @@ pub async fn create_anime_task_from_exist_files(
                     anime_task
                 );
             } else {
-                println!("{:?}", parts);
                 log::info!(
-                    "faile to find anime from anime list, try to update anime list ,anime_name: {}, episode: {}",
+                    "Failed to find anime from anime list, try to update anime list, anime_name: {}, episode: {}",
                     parts[0],
                     parts[1]
                 );
@@ -228,17 +270,17 @@ pub async fn create_anime_task_from_exist_files(
                 .unwrap();
 
                 // download img
-                let save_path = "static/img/anime_list".to_string();
+                let save_path = "../../autoAnimeUI/src/assets/images/anime_list".to_string();
                 mikan.download_img(&img_url, &save_path).await.unwrap();
 
                 // update anime task
                 let anime_task = AnimeTaskJson {
                     mikan_id,
-                    episode: parts[1].parse::<i32>().unwrap(),
-                    torrent_name: "unknow - ".to_string() + &each_episode,
+                    episode: cur_video_config.episode,
+                    torrent_name: format!("{}.torrent", cur_video_config.torrent_hash),
                     qb_task_status: 1,
-                    rename_status: 0,
-                    filename: "".to_string(),
+                    rename_status: 1,
+                    filename: video,
                 };
                 dao::anime_task::add(db_connection, &anime_task)
                     .await
@@ -506,14 +548,13 @@ pub struct VideoConfig {
 
 #[allow(dead_code)]
 pub async fn auto_update_and_rename(
-    video_file_lock: Arc<TokioRwLock<bool>>,
-    pool: Pool<ConnectionManager<SqliteConnection>>,
+    video_file_lock: &Arc<TokioRwLock<bool>>,
+    db_connection: &mut PooledConnection<ConnectionManager<diesel::SqliteConnection>>,
 ) -> Result<(), Error> {
     let qb_task_executor =
         QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
             .await
             .expect("Failed to create qb client");
-    let db_connection = &mut pool.get().unwrap();
 
     log::info!("Start auto rename and update thread");
     loop {
@@ -522,8 +563,7 @@ pub async fn auto_update_and_rename(
             .map_err(|e| handle_error(e, "Failed to get finished task"))?;
 
         if nb_new_finished_task > 0 {
-            let _ = auto_rename_handler(video_file_lock.clone(), &qb_task_executor, db_connection)
-                .await;
+            let _ = auto_rename_handler(&video_file_lock, &qb_task_executor, db_connection).await;
         }
         sleep(Duration::from_secs(5)).await;
     }
@@ -558,32 +598,17 @@ pub async fn auto_update_anime_task_handler(
 
 #[allow(dead_code)]
 pub async fn auto_rename_handler(
-    video_file_lock: Arc<TokioRwLock<bool>>,
+    video_file_lock: &Arc<TokioRwLock<bool>>,
     qb_task_executor: &QbitTaskExecutor,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<(), Error> {
     let _guard = video_file_lock.write().await; // 获取写锁
 
     let download_path = qb_task_executor.qb_api_get_download_path().await.unwrap();
-    let video_config_path = format!("{}/.videoConfig.json", download_path);
 
-    let mut file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(video_config_path)
-        .map_err(|e| handle_error(e, "Failed to create video config file."))?;
-
-    let mut contents = String::new();
-    let _ = file.read_to_string(&mut contents);
-
-    if contents.trim().is_empty() {
-        contents = "{}".to_string();
-    }
-
-    let mut video_config: HashMap<String, VideoConfig> = serde_json::from_str(&contents)
-        .map_err(|e| handle_error(e, "Failed to convert vedio config file from bytes to json"))?;
-    log::debug!("{:?}", video_config);
+    let (mut file, mut video_config) = get_video_config(&download_path)
+        .await
+        .map_err(|e| handle_error(e, "Failed to get video config"))?;
 
     let task_list = dao::anime_task::get_by_task_status(db_connection, 1, 0)
         .await
@@ -601,11 +626,7 @@ pub async fn auto_rename_handler(
                 .map_err(|e| {
                     handle_error(
                         e,
-                        format!(
-                            "Failed to update task status for anime_task: {:?}",
-                            task
-                        )
-                        .as_str(),
+                        format!("Failed to update task status for anime_task: {:?}", task).as_str(),
                     )
                 })?;
         } else {
@@ -733,6 +754,6 @@ mod test {
                 .unwrap();
 
         let video_file_lock = Arc::new(TokioRwLock::new(false));
-        let _ = auto_update_and_rename(video_file_lock.clone(), database_pool).await;
+        let _ = auto_update_and_rename(&video_file_lock, &mut database_pool.get().unwrap()).await;
     }
 }

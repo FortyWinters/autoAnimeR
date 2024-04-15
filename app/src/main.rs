@@ -50,14 +50,21 @@ async fn main() -> std::io::Result<()> {
 
     let tastk_status = Arc::new(TokioRwLock::new(false));
     let video_file_lock = Arc::new(TokioRwLock::new(false));
+    let mut db_connection = database_pool.get().unwrap();
+    
 
-    let database_pool_for_server = database_pool.clone();
+    let video_file_lock_for_task = Arc::clone(&video_file_lock);
+    spawn(async move {
+        let _ = do_anime_task::auto_update_and_rename(&video_file_lock_for_task, &mut db_connection).await;
+    });
+
     let http_server = HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(database_pool_for_server.clone()))
+            .app_data(web::Data::new(database_pool.clone()))
             .app_data(web::Data::new(tera.clone()))
             .app_data(web::Data::new(qb.clone()))
             .app_data(web::Data::new(tastk_status.clone()))
+            .app_data(web::Data::new(video_file_lock.clone()))
             .service(Files::new("/static", "./static").show_files_listing())
             .configure(anime_routes)
             .configure(setting_routes)
@@ -68,11 +75,6 @@ async fn main() -> std::io::Result<()> {
     })
     .bind(("0.0.0.0", 8080))?
     .run();
-
-    let database_pool_for_task = database_pool.clone();
-    spawn(async move {
-        let _ = do_anime_task::auto_update_and_rename(video_file_lock, database_pool_for_task).await;
-    });
 
     http_server.await
 }

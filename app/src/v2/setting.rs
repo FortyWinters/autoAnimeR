@@ -66,12 +66,13 @@ pub async fn get_task_status_handler(
 
 #[get("/reload_task")]
 pub async fn reload_task_handler(
+    video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
     pool: web::Data<Pool>,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<QbitTaskExecutor>
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
     Ok(
-        match do_anime_task::create_anime_task_from_exist_files(db_connection, &qb).await {
+        match do_anime_task::create_anime_task_from_exist_files(&video_file_lock, db_connection, &qb).await {
             Ok(_) => HttpResponse::Ok().body("ok"),
             Err(_) => HttpResponse::from(HttpResponse::InternalServerError()),
         },
