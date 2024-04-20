@@ -55,11 +55,18 @@ pub async fn get_subtitle_path_handler(
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
     qb: web::Data<QbitTaskExecutor>,
 ) -> Result<HttpResponse, Error> {
-    let res = get_subtitle_path(&item.video_name, video_file_lock, qb)
+    let subtitles = get_subtitle_path(&item.video_name, video_file_lock, qb)
         .await
         .map_err(|e| handle_error(e, "get_subtitle_path_handler failed"))?;
-    log::info!("subtitles: {:?}", res);
-    Ok(HttpResponse::Ok().json(res[0].clone()))
+
+    log::info!("subtitles: {:?}", subtitles);
+
+    let mut res = String::from("");
+    if subtitles.len() > 1 {
+        res = subtitles[0].clone();
+    }
+
+    Ok(HttpResponse::Ok().json(res))
 }
 
 async fn get_subtitle_path(
