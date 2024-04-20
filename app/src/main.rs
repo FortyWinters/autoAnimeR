@@ -72,6 +72,7 @@ async fn main() -> std::io::Result<()> {
             .configure(anime_routes_v2)
             .configure(setting_routes_v2)
             .configure(ws_routes_v2)
+            .configure(video_routes_v2)
     })
     .bind(("0.0.0.0", 8080))?
     .run();

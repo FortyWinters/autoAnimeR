@@ -24,7 +24,7 @@ pub async fn add(
                 torrent_name: &item.torrent_name,
                 qb_task_status: &item.qb_task_status,
                 rename_status: &item.rename_status,
-                filename: &item.filename
+                filename: &item.filename,
             };
             insert_into(anime_task)
                 .values(&new_anime_task)
@@ -54,7 +54,7 @@ pub async fn add_bulk(
                 torrent_name: &item.torrent_name,
                 qb_task_status: &item.qb_task_status,
                 rename_status: &item.rename_status,
-                filename: &item.filename
+                filename: &item.filename,
             };
             insert_into(anime_task)
                 .values(&new_anime_task)
@@ -162,13 +162,18 @@ pub async fn update_task_status(
     item: &String, // torrent_name
     new_qb_status: i32,
     new_rename_status: i32,
+    new_file_name: &String,
 ) -> Result<(), diesel::result::Error> {
     if let Ok(_) = anime_task
         .filter(torrent_name.like(&item))
         .first::<AnimeTask>(db_connection)
     {
         update(anime_task.filter(torrent_name.like(&item)))
-            .set((qb_task_status.eq(new_qb_status), rename_status.eq(new_rename_status)))
+            .set((
+                qb_task_status.eq(new_qb_status),
+                rename_status.eq(new_rename_status),
+                filename.eq(new_file_name),
+            ))
             .execute(db_connection)
             .expect("save failed");
     }
@@ -232,6 +237,18 @@ pub async fn get_by_task_status(
         .load::<AnimeTask>(db_connection)?;
     Ok(result)
 }
+
+#[allow(dead_code)]
+pub async fn get_by_torrent_name(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_torrent_name: &String,
+) -> Result<AnimeTask, diesel::result::Error> {
+    let result: AnimeTask = anime_task
+        .filter(torrent_name.eq(&query_torrent_name))
+        .first::<AnimeTask>(db_connection)?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -256,7 +273,7 @@ mod test {
             torrent_name: "test_torrent_name".to_string(),
             qb_task_status: 0,
             rename_status: 0,
-            filename: "test_file_name".to_string()
+            filename: "test_file_name".to_string(),
         };
 
         add(db_connection, &test_anime_task_json).await.unwrap();
@@ -279,7 +296,7 @@ mod test {
                 torrent_name: "test_torrent_name_1".to_string(),
                 qb_task_status: 0,
                 rename_status: 0,
-                filename: "test_file_name_1".to_string()
+                filename: "test_file_name_1".to_string(),
             },
             AnimeTaskJson {
                 mikan_id: 114514,
@@ -287,7 +304,7 @@ mod test {
                 torrent_name: "test_torrent_name_2".to_string(),
                 qb_task_status: 0,
                 rename_status: 0,
-                filename: "test_file_name_2".to_string()
+                filename: "test_file_name_2".to_string(),
             },
         ];
         add_bulk(db_connection, &test_anime_task_json)

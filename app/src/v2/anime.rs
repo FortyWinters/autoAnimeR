@@ -437,7 +437,7 @@ pub async fn seed_update_handler(
     Ok(HttpResponse::Ok().json(res))
 }
 
-async fn seed_update(
+pub async fn seed_update(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: AnimeRequestJson,
 ) -> Result<(), Error> {

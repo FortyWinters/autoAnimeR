@@ -1,11 +1,12 @@
 use crate::api::spider_task::do_spider_task;
-use crate::dao;
 use crate::models::anime_list::AnimeListJson;
 use crate::models::anime_seed::AnimeSeed;
 use crate::models::anime_task::{AnimeTask, AnimeTaskJson};
-use crate::mods::anime_filter;
 use crate::mods::qb_api::QbitTaskExecutor;
 use crate::mods::spider::Mikan;
+use crate::mods::{anime_filter, video_proccessor};
+use crate::v2::anime::AnimeRequestJson;
+use crate::{dao, v2};
 
 use anyhow::Error;
 // use actix_web::Error;
@@ -142,7 +143,7 @@ pub async fn create_anime_task_by_seed(
     Ok(())
 }
 
-async fn get_video_config(
+pub async fn get_video_config(
     download_path: &String,
 ) -> Result<(File, HashMap<String, VideoConfig>), Error> {
     let video_config_path = format!("{}/.videoConfig.json", download_path);
@@ -174,7 +175,7 @@ pub async fn create_anime_task_from_exist_files(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     qb_task_executor: &QbitTaskExecutor,
 ) -> Result<(), Error> {
-    let _guard = video_file_lock.read().await; // 获取写锁
+    let _guard = video_file_lock.read().await;
 
     let download_path = qb_task_executor.qb_api_get_download_path().await.unwrap();
     let (_, video_config) = get_video_config(&download_path)
@@ -215,11 +216,16 @@ pub async fn create_anime_task_from_exist_files(
                 continue;
             }
 
+            let extension = video.split(".").last().unwrap();
+            if extension == "ass" || extension == "vtt" {
+                continue;
+            }
+
             let cur_video_config: &VideoConfig;
             if let Ok(cfg) = video_config.get(&video).ok_or("error") {
                 cur_video_config = cfg;
             } else {
-                log::info!(
+                log::warn!(
                     "Failed to get anime info from video config file, anime name: [{}]",
                     video
                 );
@@ -289,6 +295,16 @@ pub async fn create_anime_task_from_exist_files(
                     "add new anime task to db, anime_task detail: {:?}",
                     anime_task
                 );
+            }
+
+            // update anime seed
+            if let Ok(_) =
+                v2::anime::seed_update(db_connection, AnimeRequestJson { mikan_id }).await
+            {
+                log::info!("Success update anime seed for [{}]", mikan_id);
+            } else {
+                log::info!("Failed to update anime seed for [{}]", mikan_id);
+                continue;
             }
         }
     }
@@ -544,6 +560,8 @@ pub struct VideoConfig {
     pub torrent_hash: String,
     pub mikan_id: i32,
     pub episode: i32,
+    pub subtitle_nb: i32,
+    pub subtitle: Vec<String>,
 }
 
 #[allow(dead_code)]
@@ -620,15 +638,21 @@ pub async fn auto_rename_handler(
         if let Ok((cur_file_name, cur_config)) =
             rename_file(qb_task_executor, db_connection, &task).await
         {
+            dao::anime_task::update_task_status(
+                db_connection,
+                &task.torrent_name,
+                1,
+                1,
+                &cur_file_name,
+            )
+            .await
+            .map_err(|e| {
+                handle_error(
+                    e,
+                    format!("Failed to update task status for anime_task: {:?}", task).as_str(),
+                )
+            })?;
             video_config.insert(cur_file_name, cur_config);
-            dao::anime_task::update_task_status(db_connection, &task.torrent_name, 1, 1)
-                .await
-                .map_err(|e| {
-                    handle_error(
-                        e,
-                        format!("Failed to update task status for anime_task: {:?}", task).as_str(),
-                    )
-                })?;
         } else {
             log::info!("Failed to execute rename task for anime_task: {:?}", task);
         }
@@ -718,7 +742,16 @@ pub async fn rename_file(
         new_total_path
     );
 
-    let _ = fs::rename(total_path, new_total_path);
+    let _ = fs::rename(&total_path, &new_total_path);
+
+    let mut subtitle_vec: Vec<String> = vec![];
+    if extension == "mkv" {
+        if let Ok(res) = video_proccessor::extract_subtitle(&new_total_path).await {
+            subtitle_vec = res;
+        } else {
+            log::warn!("");
+        }
+    }
 
     Ok((
         new_file_name,
@@ -731,6 +764,8 @@ pub async fn rename_file(
                 .to_string(),
             mikan_id: anime_task.mikan_id,
             episode: anime_task.episode,
+            subtitle_nb: subtitle_vec.len() as i32,
+            subtitle: subtitle_vec,
         },
     ))
 }

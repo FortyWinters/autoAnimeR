@@ -78,3 +78,12 @@ pub fn ws_routes_v2(cfg: &mut web::ServiceConfig) {
     use crate::v2::ws::*;
     cfg.service(web::resource("/v2/ws/").route(web::get().to(ws_index)));
 }
+
+pub fn video_routes_v2(cfg: &mut web::ServiceConfig) {
+    use crate::v2::video::*;
+    cfg.service(
+        web::scope("/v2/video")
+            .service(get_anime_task_handler)
+            .service(get_subtitle_path_handler)
+    );
+}
