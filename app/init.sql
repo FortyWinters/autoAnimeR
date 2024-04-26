@@ -72,5 +72,7 @@ CREATE TABLE "anime_task" (
   "mikan_id" INTEGER NOT NULL,
   "episode" INTEGER NOT NULL,
   "torrent_name" TEXT NOT NULL,
-  "qb_task_status" INTEGER NOT NULL DEFAULT NULL
+  "qb_task_status" INTEGER NOT NULL DEFAULT NULL,
+  "rename_status" INTEGER NOT NULL,
+  "filename" TEXT NOT NULL
 );
