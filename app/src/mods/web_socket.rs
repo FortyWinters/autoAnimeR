@@ -51,7 +51,7 @@ impl StreamHandler<Result<WSMessage, ws::ProtocolError>> for WebSocketActor {
     fn handle(&mut self, msg: Result<WSMessage, ProtocolError>, ctx: &mut Self::Context) {
         if let Ok(WSMessage::Text(text)) = msg {
             if text == "STOP" {
-                println!("WebSocket STOP @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
+                log::info!("websocket disconnect");
                 ctx.stop();
                 return;
             }
@@ -63,8 +63,6 @@ impl StreamHandler<Result<WSMessage, ws::ProtocolError>> for WebSocketActor {
                     let actor_address = ctx.address().clone();
 
                     ctx.run_interval(Duration::from_secs(2), move |_, ctx| {
-                        println!("WebSocket START $$$$$$$$$$$$$$$$$$$$$$");
-
                         let qb_clone = qb.clone();
                         let tasks_clone = tasks_shared.clone();
                         let actor_address_clone = actor_address.clone();
@@ -76,14 +74,14 @@ impl StreamHandler<Result<WSMessage, ws::ProtocolError>> for WebSocketActor {
                                         .unwrap_or_else(|_| "[]".to_string());
                                     actor_address_clone.do_send(TextMessage(json_str));
                                 }
-                                Err(e) => eprintln!("Error fetching qb tasks: {:?}", e),
+                                Err(e) => log::info!("Error fetching qb tasks: {:?}", e),
                             }
                         };
                         ctx.spawn(wrap_future(fut));
                     });
                 }
                 Err(e) => {
-                    eprintln!("Failed to parse JSON: {:?}", e);
+                    log::info!("failed to parse JSON: {:?}", e);
                     ctx.text("Error parsing tasks");
                 }
             }
