@@ -745,7 +745,7 @@ pub async fn rename_file(
     let _ = fs::rename(&total_path, &new_total_path);
 
     let mut subtitle_vec: Vec<String> = vec![];
-    if extension == "mkv" {
+    if extension == "mkv" || extension == "mp4" {
         if let Ok(res) = video_proccessor::extract_subtitle(&new_total_path).await {
             subtitle_vec = res;
         } else {
