@@ -347,25 +347,26 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_get_download_path(&self) -> Result<String, AnimeError> {
-        let app_info_endpoint = self.host.clone() + "api/v2/app/preferences";
-        let mut download_path = String::from("");
-        if let Ok(app_info_response) = self
-            .qbt_client
-            .get(app_info_endpoint.clone())
-            .header("Cookie", &self.cookie)
-            .send()
-            .await
-        {
-            let app_info_response_text = app_info_response.text().await.unwrap();
-            let json: serde_json::Value = serde_json::from_str(&app_info_response_text).unwrap();
-            download_path = json["save_path"].to_string().replace("\"", "");
-            log::info!("download path: {:?}", download_path);
-        } else {
-            log::info!(
-                "[QB API] Unable to access qb web api: {}",
-                app_info_endpoint
-            );
-        }
+        // let app_info_endpoint = self.host.clone() + "api/v2/app/preferences";
+        // let mut download_path = String::from("");
+        // if let Ok(app_info_response) = self
+        //     .qbt_client
+        //     .get(app_info_endpoint.clone())
+        //     .header("Cookie", &self.cookie)
+        //     .send()
+        //     .await
+        // {
+        //     let app_info_response_text = app_info_response.text().await.unwrap();
+        //     let json: serde_json::Value = serde_json::from_str(&app_info_response_text).unwrap();
+        //     download_path = json["save_path"].to_string().replace("\"", "");
+        //     log::info!("download path: {:?}", download_path);
+        // } else {
+        //     log::info!(
+        //         "[QB API] Unable to access qb web api: {}",
+        //         app_info_endpoint
+        //     );
+        // }
+        let download_path = "downloads".to_string();
         Ok(download_path)
     }
 }

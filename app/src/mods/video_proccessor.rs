@@ -19,7 +19,7 @@ pub struct SubtitleInfo {
 pub async fn get_subtitle_info(path: &String) -> Result<Vec<SubtitleInfo>, Error> {
     ffmpeg::init().unwrap();
 
-    let ictx = format::input(path).unwrap();
+    let ictx = format::input(path).map_err(|e| handle_error(e, "Failed to get subtitle info"))?;
     let mut subtitle_vec: Vec<SubtitleInfo> = vec![];
     let extension = path.split(".").last().unwrap();
 
@@ -83,7 +83,7 @@ pub async fn extract_subtitle(path: &String) -> Result<Vec<String>, Error> {
                 log::warn!("Failed to trans format to vtt for [{}]", path);
                 continue;
             }
-            match fs::remove_dir(&output_file) {
+            match fs::remove_file(&output_file) {
                 Ok(_) => continue,
                 Err(_) => {
                     log::warn!("Failed to remove tmp file [{}]", output_file);

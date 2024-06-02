@@ -61,10 +61,11 @@ pub async fn get_subtitle_path_handler(
 
     log::info!("subtitles: {:?}", subtitles);
 
-    let mut res = String::from("");
-    if subtitles.len() > 1 {
-        res = subtitles[0].clone();
-    }
+    let res = if subtitles.len() > 1 {
+        subtitles[0].clone()
+    } else {
+        String::new()
+    };
 
     Ok(HttpResponse::Ok().json(res))
 }
