@@ -429,15 +429,17 @@ pub async fn update_qb_task_status(
     qb_task_executor: &QbitTaskExecutor,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<(), Error> {
-    let fn_task_vec = qb_task_executor
+    if let Ok(fn_task_vec) = qb_task_executor
         .qb_api_completed_torrent_list()
         .await
-        .unwrap();
-
-    for fn_task in fn_task_vec {
-        dao::anime_task::update_qb_task_status(db_connection, fn_task)
-            .await
-            .unwrap();
+    {
+        for fn_task in fn_task_vec {
+            dao::anime_task::update_qb_task_status(db_connection, fn_task)
+                .await
+                .unwrap();
+        }
+    }else{
+        log::warn!("failed to get finished torrent")
     }
     Ok(())
 }
