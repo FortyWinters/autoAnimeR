@@ -1,11 +1,9 @@
-use actix_files::Files;
 use actix_web::{web, App, HttpServer};
 use api::do_anime_task;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
 use mods::qb_api::QbitTaskExecutor;
 use routers::*;
-use tera::Tera;
 
 mod api;
 mod dao;
@@ -36,14 +34,6 @@ async fn main() -> std::io::Result<()> {
         .build(ConnectionManager::<SqliteConnection>::new(database_url))
         .expect("Failed to create pool.");
 
-    let tera = Tera::new("templates/**/*.html").expect("Failed to load templates");
-
-    // let mut tera: Tera = Tera::default();
-    // match tera.add_raw_templates("templates/**/*") {
-    //     Ok(_) => println!("ok"),
-    //     Err(e) => panic!("error")
-    // }
-
     let qb = QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
         .await
         .expect("Failed to create qb client");
@@ -61,14 +51,9 @@ async fn main() -> std::io::Result<()> {
     let http_server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(database_pool.clone()))
-            .app_data(web::Data::new(tera.clone()))
             .app_data(web::Data::new(qb.clone()))
             .app_data(web::Data::new(tastk_status.clone()))
             .app_data(web::Data::new(video_file_lock.clone()))
-            .service(Files::new("/static", "./static").show_files_listing())
-            .configure(anime_routes)
-            .configure(setting_routes)
-            .configure(download_routes)
             .configure(anime_routes_v2)
             .configure(setting_routes_v2)
             .configure(ws_routes_v2)

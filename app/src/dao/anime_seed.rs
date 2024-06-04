@@ -178,6 +178,7 @@ pub async fn update_seedstatus_by_seedurl_with_response(
     }
 }
 
+#[allow(dead_code)]
 pub async fn update_seedstatus_by_mikanid_episode(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     query_mikanid: i32,
@@ -245,6 +246,7 @@ pub async fn delete_anime_seed_by_seed_url(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn get_by_mikanid_subgeoupid(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     query_mikanid: i32,
