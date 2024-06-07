@@ -2,7 +2,7 @@ use actix_web::{web, App, HttpServer};
 use api::do_anime_task;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
-use mods::qb_api::QbitTaskExecutor;
+use mods::{config::Config, qb_api::QbitTaskExecutor};
 use routers::*;
 
 mod api;
@@ -27,25 +27,27 @@ pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
 
-    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
+    let config = Config::load_config("./config/config.yaml").unwrap();
+    log4rs::init_file("./config/log4rs.yaml", Default::default()).unwrap();
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let database_pool = Pool::builder()
         .build(ConnectionManager::<SqliteConnection>::new(database_url))
         .expect("Failed to create pool.");
 
-    let qb = QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
+    let qb = QbitTaskExecutor::new_with_config(&config)
         .await
         .expect("Failed to create qb client");
 
     let tastk_status = Arc::new(TokioRwLock::new(false));
     let video_file_lock = Arc::new(TokioRwLock::new(false));
     let mut db_connection = database_pool.get().unwrap();
-    
 
     let video_file_lock_for_task = Arc::clone(&video_file_lock);
     spawn(async move {
-        let _ = do_anime_task::auto_update_and_rename(&video_file_lock_for_task, &mut db_connection).await;
+        let _ =
+            do_anime_task::auto_update_and_rename(&video_file_lock_for_task, &mut db_connection, &config)
+                .await;
     });
 
     let http_server = HttpServer::new(move || {

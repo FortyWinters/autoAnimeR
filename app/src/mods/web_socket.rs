@@ -1,4 +1,4 @@
-use crate::mods::qb_api::QbitTaskExecutor;
+use crate::mods::{qb_api::QbitTaskExecutor, config::Config};
 use actix::fut::wrap_future;
 use actix::ActorContext;
 use actix::Handler;
@@ -91,8 +91,9 @@ impl StreamHandler<Result<WSMessage, ws::ProtocolError>> for WebSocketActor {
 
 impl WebSocketActor {
     pub async fn new() -> Self {
+        let config = Config::load_config("./config/config.yaml").unwrap();
         WebSocketActor {
-            qb: QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
+            qb: QbitTaskExecutor::new_with_config(&config)
                 .await
                 .unwrap(),
         }

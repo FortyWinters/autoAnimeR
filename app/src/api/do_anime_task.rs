@@ -2,9 +2,9 @@ use crate::api::spider_task::do_spider_task;
 use crate::models::anime_list::AnimeListJson;
 use crate::models::anime_seed::AnimeSeed;
 use crate::models::anime_task::{AnimeTask, AnimeTaskJson};
-use crate::mods::qb_api::QbitTaskExecutor;
-use crate::mods::spider::Mikan;
-use crate::mods::{anime_filter, video_proccessor};
+use crate::mods::{
+    anime_filter, config::Config, qb_api::QbitTaskExecutor, spider::Mikan, video_proccessor,
+};
 use crate::v2::anime::AnimeRequestJson;
 use crate::{dao, v2};
 
@@ -19,8 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::prelude::*;
-use std::io::{Read, Write};
+use std::io::{prelude::*, Read, Write};
 use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
 use tokio::time::{self, sleep, Duration};
@@ -429,16 +428,13 @@ pub async fn update_qb_task_status(
     qb_task_executor: &QbitTaskExecutor,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<(), Error> {
-    if let Ok(fn_task_vec) = qb_task_executor
-        .qb_api_completed_torrent_list()
-        .await
-    {
+    if let Ok(fn_task_vec) = qb_task_executor.qb_api_completed_torrent_list().await {
         for fn_task in fn_task_vec {
             dao::anime_task::update_qb_task_status(db_connection, fn_task)
                 .await
                 .unwrap();
         }
-    }else{
+    } else {
         log::warn!("failed to get finished torrent")
     }
     Ok(())
@@ -570,9 +566,10 @@ pub struct VideoConfig {
 pub async fn auto_update_and_rename(
     video_file_lock: &Arc<TokioRwLock<bool>>,
     db_connection: &mut PooledConnection<ConnectionManager<diesel::SqliteConnection>>,
+    config: &Config,
 ) -> Result<(), Error> {
     let qb_task_executor =
-        QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
+        QbitTaskExecutor::new_with_config(config)
             .await
             .expect("Failed to create qb client");
 
@@ -780,17 +777,18 @@ mod test {
     #[tokio::test]
     pub async fn test() {
         dotenv::dotenv().ok();
+        let config = Config::load_config("./config/config.json").unwrap();
+
         let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let database_pool = Pool::builder()
             .build(ConnectionManager::<SqliteConnection>::new(database_url))
             .expect("Failed to create pool.");
 
-        let _qb_task_executor =
-            QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
-                .await
-                .unwrap();
-
+        let _qb = QbitTaskExecutor::new_with_config(&config)
+            .await
+            .expect("Failed to create qb client");
+        
         let video_file_lock = Arc::new(TokioRwLock::new(false));
-        let _ = auto_update_and_rename(&video_file_lock, &mut database_pool.get().unwrap()).await;
+        let _ = auto_update_and_rename(&video_file_lock, &mut database_pool.get().unwrap(), &config).await;
     }
 }

@@ -1,5 +1,6 @@
 use crate::error::error::AnimeError;
 use crate::models::anime_seed::AnimeSeed;
+use crate::mods::config::Config;
 use chrono::DateTime;
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
@@ -15,8 +16,10 @@ pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> AnimeError {
 #[derive(Debug, Clone)]
 pub struct QbitTaskExecutor {
     pub qbt_client: reqwest::Client,
-    pub cookie: String,
-    pub host: String,
+    cookie: String,
+    host: String,
+    download_path: String,
+    deploy_mode: String,
 }
 
 #[allow(dead_code)]
@@ -39,6 +42,42 @@ impl QbitTaskExecutor {
                         qbt_client,
                         cookie: format!("{}={}", cookie.name(), cookie.value()),
                         host,
+                        download_path: "downloads".to_string(),
+                        deploy_mode: "local".to_string(),
+                    }),
+                    None => panic!("[QB API] Login error, without cookies found"),
+                }
+            } else {
+                panic!("[QB API] Login error, response status is {}", resp.status());
+            }
+        } else {
+            panic!("[QB API] Login error, qbittorrent client error");
+        }
+    }
+
+    pub async fn new_with_config(config: &Config) -> Result<Self, AnimeError> {
+        let qbt_client = reqwest::Client::new();
+        let host = config.qb_config.qb_url.to_string();
+        let login_endpoint = host.clone() + "api/v2/auth/login";
+
+        if let Ok(resp) = qbt_client
+            .post(login_endpoint)
+            .header("Referer", &host)
+            .form(&[
+                ("username", config.qb_config.username.clone()),
+                ("password", config.qb_config.password.clone()),
+            ])
+            .send()
+            .await
+        {
+            if resp.status().is_success() {
+                match resp.cookies().next() {
+                    Some(cookie) => Ok(Self {
+                        qbt_client,
+                        cookie: format!("{}={}", cookie.name(), cookie.value()),
+                        host,
+                        download_path: config.download_path.clone(),
+                        deploy_mode: config.deploy_mode.clone(),
                     }),
                     None => panic!("[QB API] Login error, without cookies found"),
                 }
@@ -280,11 +319,8 @@ impl QbitTaskExecutor {
                 .map_err(|e| {
                     handle_error(
                         e,
-                        format!(
-                            "Failed to serialize {:?}",
-                            completed_torrent_response_text
-                        )
-                        .as_str(),
+                        format!("Failed to serialize {:?}", completed_torrent_response_text)
+                            .as_str(),
                     )
                 })?;
 
@@ -347,27 +383,30 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_get_download_path(&self) -> Result<String, AnimeError> {
-        // let app_info_endpoint = self.host.clone() + "api/v2/app/preferences";
-        // let mut download_path = String::from("");
-        // if let Ok(app_info_response) = self
-        //     .qbt_client
-        //     .get(app_info_endpoint.clone())
-        //     .header("Cookie", &self.cookie)
-        //     .send()
-        //     .await
-        // {
-        //     let app_info_response_text = app_info_response.text().await.unwrap();
-        //     let json: serde_json::Value = serde_json::from_str(&app_info_response_text).unwrap();
-        //     download_path = json["save_path"].to_string().replace("\"", "");
-        //     log::info!("download path: {:?}", download_path);
-        // } else {
-        //     log::info!(
-        //         "[QB API] Unable to access qb web api: {}",
-        //         app_info_endpoint
-        //     );
-        // }
-        let download_path = "downloads".to_string();
-        Ok(download_path)
+        let app_info_endpoint = self.host.clone() + "api/v2/app/preferences";
+        let mut download_path = String::from("");
+        if let Ok(app_info_response) = self
+            .qbt_client
+            .get(app_info_endpoint.clone())
+            .header("Cookie", &self.cookie)
+            .send()
+            .await
+        {
+            let app_info_response_text = app_info_response.text().await.unwrap();
+            let json: serde_json::Value = serde_json::from_str(&app_info_response_text).unwrap();
+            download_path = json["save_path"].to_string().replace("\"", "");
+            log::info!("download path: {:?}", download_path);
+        } else {
+            log::info!(
+                "[QB API] Unable to access qb web api: {}",
+                app_info_endpoint
+            );
+        }
+
+        match self.deploy_mode.as_str() {
+            "docker" => Ok(self.download_path.clone()),
+            _ => Ok(download_path),
+        }
     }
 }
 #[derive(Default, Debug, Deserialize, Serialize)]
@@ -456,37 +495,9 @@ mod test {
     use super::*;
 
     #[tokio::test]
-    async fn test_qb_api_version() {
-        let qb_task_executor =
-            QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
-                .await
-                .unwrap();
-
-        qb_task_executor.qb_api_version().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_qb_api_torrent_info() {
-        let torrent_name = "bdd2f547cdfd8a38011a5ea451d65379c9572305.torrent".to_string();
-
-        let qb_task_executor =
-            QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
-                .await
-                .unwrap();
-
-        let r = qb_task_executor
-            .qb_api_torrent_info(&torrent_name)
-            .await
-            .unwrap();
-        println!("{}", r.state);
-    }
-
-    #[tokio::test]
     async fn test_qb_api_add_torrent() {
-        let qb_task_executor =
-            QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
-                .await
-                .unwrap();
+        let config = Config::load_config("./config/config.json").unwrap();
+        let qb_task_executor = QbitTaskExecutor::new_with_config(&config).await.unwrap();
 
         let anime_name = "test".to_string();
         let anime_seed_info = AnimeSeed {
@@ -507,30 +518,5 @@ mod test {
             .qb_api_add_torrent(&anime_name, &anime_seed_info)
             .await
             .unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_qb_api() {
-        let qb_task_executor =
-            QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
-                .await
-                .unwrap();
-
-        let r = qb_task_executor
-            .qb_api_completed_torrent_list()
-            .await
-            .unwrap();
-
-        let _r = qb_task_executor.qb_api_get_download_path().await.unwrap();
-
-        println!("{:?}", r.len())
-    }
-
-    #[tokio::test]
-    async fn test() {
-        let _qb_task_executor =
-            QbitTaskExecutor::new_with_login("admin".to_string(), "adminadmin".to_string())
-                .await
-                .unwrap();
     }
 }
