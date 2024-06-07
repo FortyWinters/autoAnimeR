@@ -401,7 +401,14 @@ fn regex_seed_1080(seed_name: &str) -> bool {
     !str_list.is_empty()
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
+pub struct BangumiInfo {
+    pub bangumi_id: i32,
+    pub bangumi_rank: String,
+    pub bangumi_summary: String,
+    pub website: String,
+}
+
 impl Bangumi {
     pub fn new() -> Result<Bangumi, Box<dyn Error>> {
         let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
@@ -423,22 +430,17 @@ impl Bangumi {
         return Ok(Document::from(body.as_str()));
     }
 
-    pub async fn get_bangumi_info(&self, bangumi_id: i32) -> Result<String, Box<dyn Error>> {
+    pub async fn get_bangumi_info(&self, bangumi_id: i32) -> Result<BangumiInfo, Box<dyn Error>> {
         let url = format!("{}/subject/{}", self.url, bangumi_id);
         let document = self.request_html(&url).await?;
 
         let rank_element = document.find(Name("span").and(Class("number"))).next();
-        let bangumi_rank = rank_element.map_or(Ok(0.0), |element| {
-            let rank_text = element.text();
-            rank_text
-                .parse::<f64>()
-                .map_err(|e| Box::<dyn Error>::from(e))
-        })?;
+        let bangumi_rank = rank_element.map_or(String::new(), |el| el.text());
 
-        let story_element = document
+        let summary_element = document
             .find(Name("div").and(Class("subject_summary")))
             .next();
-        let bangumi_story = story_element.map_or(String::new(), |el| el.text());
+        let bangumi_summary = summary_element.map_or(String::new(), |el| el.text());
 
         let bangumi_website = document
             .find(Name("li"))
@@ -456,10 +458,11 @@ impl Bangumi {
             })
             .unwrap_or_default();
 
-        println!("{:?}", bangumi_rank);
-        println!("{:?}", bangumi_story);
-        println!("{:?}", bangumi_website);
-
-        Ok("1233".to_string())
+        Ok(BangumiInfo {
+            bangumi_id,
+            bangumi_rank,
+            bangumi_summary,
+            website: bangumi_website,
+        })
     }
 }

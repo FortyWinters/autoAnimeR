@@ -25,6 +25,10 @@ pub async fn add(
                 update_day: &item.update_day,
                 anime_type: &item.anime_type,
                 subscribe_status: &item.subscribe_status,
+                bangumi_id: &item.bangumi_id,
+                bangumi_rank: &item.bangumi_rank,
+                bangumi_summary: &item.bangumi_summary,
+                website: &item.website,
             };
             insert_into(anime_list)
                 .values(&new_anime_list)
@@ -54,6 +58,10 @@ pub async fn add_vec(
                 update_day: &item.update_day,
                 anime_type: &item.anime_type,
                 subscribe_status: &item.subscribe_status,
+                bangumi_id: &item.bangumi_id,
+                bangumi_rank: &item.bangumi_rank,
+                bangumi_summary: &item.bangumi_summary,
+                website: &item.website,
             };
             insert_into(anime_list)
                 .values(&new_anime_list)
@@ -94,6 +102,23 @@ pub async fn update_subscribestatus_by_mikanid(
 ) -> Result<(), diesel::result::Error> {
     diesel::update(anime_list.filter(mikan_id.eq(query_mikanid)))
         .set(subscribe_status.eq(update_subscribestatus))
+        .execute(db_connection)?;
+    Ok(())
+}
+
+// update bangumi info by mikan_id
+pub async fn update_bangumiinfo_by_mikanid(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_mikanid: i32,
+    item: BangumiInfoJson,
+) -> Result<(), diesel::result::Error> {
+    diesel::update(anime_list.filter(mikan_id.eq(query_mikanid)))
+        .set((
+            bangumi_id.eq(item.bangumi_id),
+            bangumi_rank.eq(item.bangumi_rank),
+            bangumi_summary.eq(item.bangumi_summary),
+            website.eq(item.website),
+        ))
         .execute(db_connection)?;
     Ok(())
 }
@@ -152,6 +177,10 @@ mod test {
             img_url: "/images/Bangumi/202310/69e733eb.jpg".to_string(),
             anime_type: 0,
             subscribe_status: 1,
+            bangumi_id: 12,
+            bangumi_rank: "4.3".to_string(),
+            bangumi_summary: "asdasd".to_string(),
+            website: "www.baidu.com".to_string(),
         };
 
         let r = add(db_connection, test_anime_seed_json).await.unwrap();

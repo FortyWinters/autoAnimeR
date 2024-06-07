@@ -28,6 +28,10 @@ diesel::table! {
         img_url -> Text,
         anime_type -> Integer,
         subscribe_status -> Integer,
+        bangumi_id -> Integer,
+        bangumi_rank -> Text,
+        bangumi_summary -> Text,
+        website -> Text,
     }
 }
 

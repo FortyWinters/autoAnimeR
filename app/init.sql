@@ -33,7 +33,11 @@ CREATE TABLE "anime_list" (
   "update_day" INTEGER NOT NULL DEFAULT NULL,
   "img_url" TEXT NOT NULL,
   "anime_type" INTEGER NOT NULL DEFAULT NULL,
-  "subscribe_status" INTEGER NOT NULL DEFAULT NULL
+  "subscribe_status" INTEGER NOT NULL DEFAULT NULL,
+  "bangumi_id" INTEGER NOT NULL DEFAULT NULL,
+  "bangumi_rank" TEXT NOT NULL,
+  "bangumi_summary" TEXT NOT NULL,
+  "website" TEXT NOT NULL
 );
 
 -- ----------------------------

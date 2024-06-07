@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::schema::*;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Queryable, Eq, PartialEq)]
 pub struct AnimeList {
@@ -9,7 +9,11 @@ pub struct AnimeList {
     pub update_day: i32,
     pub img_url: String,
     pub anime_type: i32,
-    pub subscribe_status: i32
+    pub subscribe_status: i32,
+    pub bangumi_id: i32,
+    pub bangumi_rank: String,
+    pub bangumi_summary: String,
+    pub website: String,
 }
 
 impl Ord for AnimeList {
@@ -36,7 +40,11 @@ pub struct PostAnimeList<'a> {
     pub update_day: &'a i32,
     pub img_url: &'a str,
     pub anime_type: &'a i32,
-    pub subscribe_status: &'a i32
+    pub subscribe_status: &'a i32,
+    pub bangumi_id: &'a i32,
+    pub bangumi_rank: &'a str,
+    pub bangumi_summary: &'a str,
+    pub website: &'a str,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,5 +54,17 @@ pub struct AnimeListJson {
     pub update_day: i32,
     pub img_url: String,
     pub anime_type: i32,
-    pub subscribe_status: i32
+    pub subscribe_status: i32,
+    pub bangumi_id: i32,
+    pub bangumi_rank: String,
+    pub bangumi_summary: String,
+    pub website: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BangumiInfoJson {
+    pub bangumi_id: i32,
+    pub bangumi_rank: String,
+    pub bangumi_summary: String,
+    pub website: String,
 }

@@ -282,6 +282,10 @@ async fn update_anime_broadcast(
             update_day: anime.update_day,
             anime_type: anime.anime_type,
             subscribe_status: anime.subscribe_status,
+            bangumi_id: -1,
+            bangumi_rank: "暂无评分".to_string(),
+            bangumi_summary: "".to_string(),
+            website: "".to_string(),
         });
         anime_broadcast_json_vec.push(anime_broadcast::AnimeBroadcastJson {
             mikan_id: anime.mikan_id,
@@ -443,9 +447,30 @@ pub async fn seed_update(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: AnimeRequestJson,
 ) -> Result<(), Error> {
-    let mikan_id = item.mikan_id;
-
     let mikan = spider::Mikan::new()?;
+    let bangumi = spider::Bangumi::new()?;
+
+    let mikan_id = item.mikan_id;
+    let bangumi_id = mikan.get_bangumi_id(mikan_id).await?;
+
+    let bangumi_info = bangumi.get_bangumi_info(bangumi_id).await?;
+    dao::anime_list::update_bangumiinfo_by_mikanid(
+        db_connection,
+        mikan_id,
+        anime_list::BangumiInfoJson {
+            bangumi_id: bangumi_info.bangumi_id,
+            bangumi_rank: bangumi_info.bangumi_rank,
+            bangumi_summary: bangumi_info.bangumi_summary,
+            website: bangumi_info.website,
+        },
+    )
+    .await
+    .map_err(|e| {
+        handle_error(
+            e,
+            "update_seed, dao::anime_list::update_bangumiinfo_by_mikanid failed",
+        )
+    })?;
 
     let anime_info = dao::anime_list::get_by_mikanid(db_connection, mikan_id)
         .await
