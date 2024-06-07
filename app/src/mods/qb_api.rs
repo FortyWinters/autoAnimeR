@@ -15,7 +15,10 @@ pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> AnimeError {
 
 #[derive(Debug, Clone)]
 pub struct QbitTaskExecutor {
-    pub qbt_client: reqwest::Client,
+    pub is_login: bool,
+    qbt_client: reqwest::Client,
+    username: String,
+    password: String,
     cookie: String,
     host: String,
     download_path: String,
@@ -32,7 +35,7 @@ impl QbitTaskExecutor {
         if let Ok(resp) = qbt_client
             .post(login_endpoint)
             .header("Referer", &host)
-            .form(&[("username", username), ("password", password)])
+            .form(&[("username", &username), ("password", &password)])
             .send()
             .await
         {
@@ -40,6 +43,9 @@ impl QbitTaskExecutor {
                 match resp.cookies().next() {
                     Some(cookie) => Ok(Self {
                         qbt_client,
+                        username,
+                        password,
+                        is_login: true,
                         cookie: format!("{}={}", cookie.name(), cookie.value()),
                         host,
                         download_path: "downloads".to_string(),
@@ -64,32 +70,86 @@ impl QbitTaskExecutor {
             .post(login_endpoint)
             .header("Referer", &host)
             .form(&[
-                ("username", config.qb_config.username.clone()),
-                ("password", config.qb_config.password.clone()),
+                ("username", &config.qb_config.username),
+                ("password", &config.qb_config.password),
             ])
             .send()
             .await
         {
             if resp.status().is_success() {
                 match resp.cookies().next() {
-                    Some(cookie) => Ok(Self {
-                        qbt_client,
-                        cookie: format!("{}={}", cookie.name(), cookie.value()),
-                        host,
-                        download_path: config.download_path.clone(),
-                        deploy_mode: config.deploy_mode.clone(),
-                    }),
-                    None => panic!("[QB API] Login error, without cookies found"),
+                    Some(cookie) => {
+                        log::info!("[QB API] Successfully Connect to qbittorrent web api");
+                        return Ok(Self {
+                            qbt_client,
+                            username: config.qb_config.username.clone(),
+                            password: config.qb_config.password.clone(),
+                            is_login: true,
+                            cookie: format!("{}={}", cookie.name(), cookie.value()),
+                            host,
+                            download_path: config.download_path.clone(),
+                            deploy_mode: config.deploy_mode.clone(),
+                        });
+                    }
+                    None => log::error!("[QB API] Login error, without cookies found"),
                 }
             } else {
-                panic!("[QB API] Login error, response status is {}", resp.status());
+                log::error!("[QB API] Login error, response status is {}", resp.status());
             }
         } else {
-            panic!("[QB API] Login error, qbittorrent client error");
+            log::error!("[QB API] Login error, qbittorrent client error");
         }
+
+        Ok(Self {
+            qbt_client,
+            username: config.qb_config.username.clone(),
+            password: config.qb_config.password.clone(),
+            is_login: false,
+            cookie: "".to_string(),
+            host,
+            download_path: config.download_path.clone(),
+            deploy_mode: config.deploy_mode.clone(),
+        })
+    }
+
+    pub async fn relogin(&mut self) -> Result<(), AnimeError> {
+        let login_endpoint = self.host.clone() + "api/v2/auth/login";
+
+        if let Ok(resp) = self.qbt_client
+            .post(login_endpoint)
+            .header("Referer", &self.host)
+            .form(&[
+                ("username", &self.username),
+                ("password", &self.password),
+            ])
+            .send()
+            .await
+        {
+            if resp.status().is_success() {
+                match resp.cookies().next() {
+                    Some(cookie) => {
+                        log::info!("[QB API] Successfully Connect to qbittorrent web api");
+                        self.cookie = format!("{}={}", cookie.name(), cookie.value());
+                        self.is_login = true;
+                        return Ok(())
+                    }
+                    None => log::error!("[QB API] Login error, without cookies found"),
+                }
+            } else {
+                log::error!("[QB API] Login error, response status is {}", resp.status());
+            }
+        } else {
+            log::error!("[QB API] Login error, qbittorrent client error");
+        }
+
+        Err(AnimeError::new("[QB API]relogin failed".to_string()))
     }
 
     pub async fn qb_api_version(&self) -> Result<(), AnimeError> {
+        if !self.is_login {
+            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+        }
+
         let webapiversion_endpoint = self.host.clone() + "api/v2/app/webapiVersion";
         if let Ok(info_response) = self
             .qbt_client
@@ -115,6 +175,10 @@ impl QbitTaskExecutor {
         &self,
         torrent_name: &String,
     ) -> Result<TorrentInfo, AnimeError> {
+        if !self.is_login {
+            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+        }
+
         let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
         let hashes = torrent_name.split('.').next().unwrap().to_owned();
 
@@ -149,10 +213,14 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_add_torrent(
-        &self,
+        & self,
         anime_name: &String,
         anime_seed_info: &AnimeSeed,
     ) -> Result<(), AnimeError> {
+        if !self.is_login {
+            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+        }
+
         let add_endpoint = self.host.clone() + "api/v2/torrents/add";
         let file_name = anime_seed_info
             .seed_url
@@ -186,6 +254,10 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_del_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
+        if !self.is_login {
+            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+        }
+
         let delete_endpoint = self.host.clone() + "api/v2/torrents/delete";
         let hashes = torrent_name.split('.').next().unwrap().to_owned();
 
@@ -210,6 +282,10 @@ impl QbitTaskExecutor {
         subgroup_name: &String,
         anime_seed_info: &AnimeSeed,
     ) -> Result<(), AnimeError> {
+        if !self.is_login {
+            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+        }
+
         let rename_file_endpoint = self.host.clone() + "api/v2/torrents/renameFile";
         let torrent_name = anime_seed_info
             .seed_url
@@ -265,6 +341,10 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_resume_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
+        if !self.is_login {
+            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+        }
+
         let resume_endpoint = self.host.clone() + "api/v2/torrents/resume";
         let hashes = torrent_name.split('.').next().unwrap().to_owned();
 
@@ -284,6 +364,10 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_pause_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
+        if !self.is_login {
+            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+        }
+
         let pause_endpoint = self.host.clone() + "api/v2/torrents/pause";
         let hashes = torrent_name.split('.').next().unwrap().to_owned();
 
@@ -303,6 +387,10 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_completed_torrent_list(&self) -> Result<Vec<String>, AnimeError> {
+        if !self.is_login {
+            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+        }
+
         let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
         let mut torrent_hash_list: Vec<String> = Vec::new();
 
@@ -346,6 +434,10 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_completed_torrent_set(&self) -> Result<HashSet<String>, AnimeError> {
+        if !self.is_login {
+            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+        }
+
         let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
         let mut torrent_hash_set: HashSet<String> = HashSet::new();
 
@@ -383,6 +475,10 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_get_download_path(&self) -> Result<String, AnimeError> {
+        if !self.is_login {
+            return Ok(self.download_path.clone());
+        }
+
         let app_info_endpoint = self.host.clone() + "api/v2/app/preferences";
         let mut download_path = String::from("");
         if let Ok(app_info_response) = self

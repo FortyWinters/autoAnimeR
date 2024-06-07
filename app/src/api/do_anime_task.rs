@@ -2,9 +2,7 @@ use crate::api::spider_task::do_spider_task;
 use crate::models::anime_list::AnimeListJson;
 use crate::models::anime_seed::AnimeSeed;
 use crate::models::anime_task::{AnimeTask, AnimeTaskJson};
-use crate::mods::{
-    anime_filter, config::Config, qb_api::QbitTaskExecutor, spider::Mikan, video_proccessor,
-};
+use crate::mods::{anime_filter, qb_api::QbitTaskExecutor, spider::Mikan, video_proccessor};
 use crate::v2::anime::AnimeRequestJson;
 use crate::{dao, v2};
 
@@ -41,6 +39,11 @@ pub async fn create_anime_task_bulk(
     qb_task_executor: &QbitTaskExecutor,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<(), Error> {
+    if !qb_task_executor.is_login {
+        log::warn!("qbittorrent client not started");
+        return Ok(());
+    }
+
     // 取出订阅的全部番剧列表
     let anime_list_vec = dao::anime_list::get_by_subscribestatus(db_connection, 1)
         .await
@@ -85,6 +88,11 @@ pub async fn create_anime_task_single(
     mikan_id: i32,
     episode: i32, // anime_task_idx
 ) -> Result<(), Error> {
+    if !qb_task_executor.is_login {
+        log::warn!("qbittorrent client not started");
+        return Ok(());
+    }
+
     let anime_seed_vec =
         dao::anime_seed::get_by_mikanid_and_episode(db_connection, mikan_id, episode)
             .await
@@ -130,16 +138,19 @@ pub async fn create_anime_task_by_seed(
                 rename_status: 0,
                 filename: "".to_string(),
             };
-            dao::anime_task::add(db_connection, &anime_task_info)
-                .await
-                .unwrap();
-            create_qb_task(&qb_task_executor, db_connection, &anime_seed)
-                .await
-                .unwrap();
+
+            match create_qb_task(&qb_task_executor, db_connection, &anime_seed).await {
+                Ok(_) => {
+                    dao::anime_task::add(db_connection, &anime_task_info)
+                        .await
+                        .unwrap();
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
         }
-        DownloadSeedStatus::FAILED(_) => {}
+        DownloadSeedStatus::FAILED(_) => Err(Error::msg("Failed to download seed.")),
     }
-    Ok(())
 }
 
 pub async fn get_video_config(
@@ -405,21 +416,16 @@ pub async fn create_qb_task(
         .unwrap()
         .anime_name;
 
-    // let subgroup_name =
-    //     dao::anime_subgroup::get_by_subgroupid(db_connection, &anime_seed.subgroup_id)
-    //         .await
-    //         .unwrap()
-    //         .subgroup_name;
-
-    qb_task_executor
+    match qb_task_executor
         .qb_api_add_torrent(&anime_name, &anime_seed)
         .await
-        .unwrap();
-    // qb_task_executor
-    //     .qb_api_torrent_rename_file(&anime_name, &subgroup_name, &anime_seed)
-    //     .await
-    //     .unwrap();
-    Ok(())
+    {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            log::warn!("failed to create qb task, err: {}", e);
+            Err(Error::from(e))
+        }
+    }
 }
 
 // This is a ugly failure.
@@ -566,13 +572,8 @@ pub struct VideoConfig {
 pub async fn auto_update_and_rename(
     video_file_lock: &Arc<TokioRwLock<bool>>,
     db_connection: &mut PooledConnection<ConnectionManager<diesel::SqliteConnection>>,
-    config: &Config,
+    qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
 ) -> Result<(), Error> {
-    let qb_task_executor =
-        QbitTaskExecutor::new_with_config(config)
-            .await
-            .expect("Failed to create qb client");
-
     log::info!("Start auto rename and update thread");
     loop {
         let nb_new_finished_task = auto_update_anime_task_handler(&qb_task_executor, db_connection)
@@ -587,16 +588,17 @@ pub async fn auto_update_and_rename(
 }
 
 pub async fn auto_update_anime_task_handler(
-    qb_task_executor: &QbitTaskExecutor,
+    qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<i32, Error> {
-    let finished_task_set = qb_task_executor
+    let qb = qb_task_executor.read().await;
+    let finished_task_set = qb
         .qb_api_completed_torrent_set()
         .await
-        .unwrap();
+        .map_err(|e| handle_error(e, "Failed to get finished task list"))?;
     let under_update_task_list = dao::anime_task::get_by_qbtaskstatus(db_connection, 0)
         .await
-        .map_err(|e| handle_error(e, "Failed to get task list"))?;
+        .map_err(|e| handle_error(e, "Failed to get under update task list"))?;
 
     let mut task_cnt = 0;
 
@@ -616,12 +618,12 @@ pub async fn auto_update_anime_task_handler(
 #[allow(dead_code)]
 pub async fn auto_rename_handler(
     video_file_lock: &Arc<TokioRwLock<bool>>,
-    qb_task_executor: &QbitTaskExecutor,
+    qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<(), Error> {
     let _guard = video_file_lock.write().await; // 获取写锁
-
-    let download_path = qb_task_executor.qb_api_get_download_path().await.unwrap();
+    let qb = qb_task_executor.read().await;
+    let download_path = qb.qb_api_get_download_path().await.unwrap();
 
     let (mut file, mut video_config) = get_video_config(&download_path)
         .await
@@ -634,9 +636,7 @@ pub async fn auto_rename_handler(
     log::debug!("{:?}", task_list);
 
     for task in task_list {
-        if let Ok((cur_file_name, cur_config)) =
-            rename_file(qb_task_executor, db_connection, &task).await
-        {
+        if let Ok((cur_file_name, cur_config)) = rename_file(&qb, db_connection, &task).await {
             dao::anime_task::update_task_status(
                 db_connection,
                 &task.torrent_name,
@@ -772,6 +772,7 @@ pub async fn rename_file(
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::Config;
     use crate::Pool;
 
     #[tokio::test]
@@ -784,11 +785,14 @@ mod test {
             .build(ConnectionManager::<SqliteConnection>::new(database_url))
             .expect("Failed to create pool.");
 
-        let _qb = QbitTaskExecutor::new_with_config(&config)
-            .await
-            .expect("Failed to create qb client");
-        
+        let qb = Arc::new(TokioRwLock::new(
+            QbitTaskExecutor::new_with_config(&config)
+                .await
+                .expect("Failed to create qb client"),
+        ));
+
         let video_file_lock = Arc::new(TokioRwLock::new(false));
-        let _ = auto_update_and_rename(&video_file_lock, &mut database_pool.get().unwrap(), &config).await;
+        let _ =
+            auto_update_and_rename(&video_file_lock, &mut database_pool.get().unwrap(), &qb).await;
     }
 }

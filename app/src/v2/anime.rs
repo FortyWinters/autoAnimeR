@@ -12,6 +12,8 @@ use futures::future::join_all;
 use log;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::sync::Arc;
+use tokio::sync::RwLock as TokioRwLock;
 
 pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> actix_web::Error {
     log::error!("{}, error: {:?}", message, e);
@@ -584,7 +586,7 @@ pub struct SeedRequestJson {
 pub async fn seed_download_handler(
     pool: web::Data<Pool>,
     item: web::Json<SeedRequestJson>,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<HttpResponse, Error> {
     log::info!("seed_download_handler: /seed/download {:?}", item);
 
@@ -602,9 +604,17 @@ pub async fn seed_download_handler(
 pub async fn seed_download(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: SeedRequestJson,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<(), Error> {
     let mikan = spider::Mikan::new()?;
+    let qb = qb.read().await;
+
+    if !qb.is_login {
+        return Err(handle_error(
+            anyhow::Error::msg("qbittorrent client not started"),
+            "failed to down load seed",
+        ));
+    }
 
     dao::anime_seed::update_seedstatus_by_seedurl(db_connection, &item.seed_url, 1)
         .await
@@ -645,7 +655,7 @@ fn convert_json_seed_to_anime_seed(sj: SeedRequestJson) -> anime_seed::AnimeSeed
 pub async fn get_anime_detail_handler(
     pool: web::Data<Pool>,
     path: web::Path<(i32,)>,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<HttpResponse, Error> {
     log::info!("get_anime_detail_handler: /detail/{}", path.0);
     let db_connection = &mut pool
@@ -669,7 +679,7 @@ pub struct AnimeDetail {
 async fn get_anime_detail(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     mikan_id: i32,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<AnimeDetail, Error> {
     task_update(db_connection, qb)
         .await
@@ -701,7 +711,7 @@ async fn get_anime_detail(
 pub async fn task_delete_handler(
     pool: web::Data<Pool>,
     item: web::Json<SeedRequestJson>,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<HttpResponse, Error> {
     log::info!("task_delete_handler: /task/delete {:?}", item);
 
@@ -719,10 +729,12 @@ pub async fn task_delete_handler(
 pub async fn task_delete(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: SeedRequestJson,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<(), Error> {
     let torrent_name =
         get_torrent_name_from_url(&item.seed_url).unwrap_or_else(|| item.seed_url.clone());
+
+    let qb = qb.read().await;
 
     qb.qb_api_del_torrent(&torrent_name)
         .await
@@ -742,7 +754,7 @@ pub async fn task_delete(
 #[post("/task/update")]
 pub async fn task_update_handler(
     pool: web::Data<Pool>,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<HttpResponse, Error> {
     log::info!("task_update_handler: /task/udpate");
 
@@ -759,8 +771,9 @@ pub async fn task_update_handler(
 
 pub async fn task_update(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<(), Error> {
+    let qb = qb.read().await;
     do_anime_task::update_qb_task_status(&qb, db_connection)
         .await
         .map_err(|e| {
@@ -771,4 +784,3 @@ pub async fn task_update(
         })?;
     Ok(())
 }
-

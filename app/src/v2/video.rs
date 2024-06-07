@@ -53,7 +53,7 @@ pub struct VideoName {
 pub async fn get_subtitle_path_handler(
     item: web::Json<VideoName>,
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<HttpResponse, Error> {
     let subtitles = get_subtitle_path(&item.video_name, video_file_lock, qb)
         .await
@@ -73,9 +73,10 @@ pub async fn get_subtitle_path_handler(
 async fn get_subtitle_path(
     video_name: &String,
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
-    qb: web::Data<QbitTaskExecutor>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<Vec<String>, Error> {
     let _guard = video_file_lock.read().await;
+    let qb = qb.read().await;
     let download_path = qb.qb_api_get_download_path().await.unwrap();
 
     let (_, video_config) = do_anime_task::get_video_config(&download_path)

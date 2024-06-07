@@ -35,18 +35,19 @@ async fn main() -> std::io::Result<()> {
         .build(ConnectionManager::<SqliteConnection>::new(database_url))
         .expect("Failed to create pool.");
 
-    let qb = QbitTaskExecutor::new_with_config(&config)
+    let qb = Arc::new(TokioRwLock::new(QbitTaskExecutor::new_with_config(&config)
         .await
-        .expect("Failed to create qb client");
+        .expect("Failed to create qb client")));
 
     let tastk_status = Arc::new(TokioRwLock::new(false));
     let video_file_lock = Arc::new(TokioRwLock::new(false));
     let mut db_connection = database_pool.get().unwrap();
 
+    let qb_for_task = Arc::clone(&qb);
     let video_file_lock_for_task = Arc::clone(&video_file_lock);
     spawn(async move {
         let _ =
-            do_anime_task::auto_update_and_rename(&video_file_lock_for_task, &mut db_connection, &config)
+            do_anime_task::auto_update_and_rename(&video_file_lock_for_task, &mut db_connection, &qb_for_task)
                 .await;
     });
 
