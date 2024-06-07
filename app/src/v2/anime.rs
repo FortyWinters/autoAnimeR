@@ -283,7 +283,7 @@ async fn update_anime_broadcast(
             anime_type: anime.anime_type,
             subscribe_status: anime.subscribe_status,
             bangumi_id: -1,
-            bangumi_rank: "暂无评分".to_string(),
+            bangumi_rank: "".to_string(),
             bangumi_summary: "".to_string(),
             website: "".to_string(),
         });

@@ -2,18 +2,18 @@
 
 autoAnime in Rust 🦀️
 
-## db 部署
+## 依赖
 
 ```
 brew install sqlite
-sh app/db_init.sh
 ```
 
-## 运行
+## 部署
 
 ```
 cd app
+sh db_init.sh
 cargo run
 ```
 
-http://127.0.0.1:8080/anime/
+http://127.0.0.1:5173

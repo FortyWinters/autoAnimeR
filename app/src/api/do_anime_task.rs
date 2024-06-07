@@ -281,7 +281,7 @@ pub async fn create_anime_task_from_exist_files(
                         img_url: anime.img_url,
                         subscribe_status: anime.subscribe_status,
                         bangumi_id: -1,
-                        bangumi_rank: "暂无评分".to_string(),
+                        bangumi_rank: "".to_string(),
                         bangumi_summary: "".to_string(),
                         website: "".to_string()
                     },
