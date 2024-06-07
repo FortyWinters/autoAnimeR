@@ -15,6 +15,12 @@ pub struct Mikan {
     url: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct Bangumi {
+    client: Client,
+    url: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Anime {
     pub mikan_id: i32,
@@ -167,6 +173,24 @@ impl Mikan {
             }
         }
         return Ok(subgroup_list);
+    }
+
+    pub async fn get_bangumi_id(&self, mikan_id: i32) -> Result<i32, Box<dyn Error>> {
+        let url = format!("{}/Home/Bangumi/{}", self.url, mikan_id);
+        let document = self.request_html(&url).await?;
+        let selector = Class("bangumi-info").descendant(Name("a").and(Class("w-other-c")));
+        let mut anime_urls = Vec::new();
+        for element in document.find(selector) {
+            if let Some(href) = element.attr("href") {
+                anime_urls.push(href.to_string());
+            }
+        }
+        let bangumi_id_str = anime_urls[1]
+            .split('/')
+            .last()
+            .ok_or("Invalid URL format")?;
+        let bangumi_id = bangumi_id_str.parse::<i32>()?;
+        Ok(bangumi_id)
     }
 
     pub async fn get_seed(
@@ -327,7 +351,13 @@ impl Mikan {
             }
         }
 
-        log::info!("get anime: {}, {}, {}, {}", anime_name, img_url, anime_type, update_day);
+        log::info!(
+            "get anime: {}, {}, {}, {}",
+            anime_name,
+            img_url,
+            anime_type,
+            update_day
+        );
         Ok(Anime {
             anime_name: anime_name,
             mikan_id: mikan_id,
@@ -369,4 +399,67 @@ fn regex_seed_1080(seed_name: &str) -> bool {
     let re = Regex::new(r"1080").unwrap();
     let str_list: Vec<&str> = re.find_iter(seed_name).map(|mat| mat.as_str()).collect();
     !str_list.is_empty()
+}
+
+#[allow(dead_code)]
+impl Bangumi {
+    pub fn new() -> Result<Bangumi, Box<dyn Error>> {
+        let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
+        Ok(Bangumi {
+            client,
+            url: "https://bgm.tv".to_string(),
+        })
+    }
+
+    async fn request_html(&self, url: &str) -> Result<Document, Box<dyn Error>> {
+        let response = self.client.get(url).send().await?;
+        if !response.status().is_success() {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Request failed",
+            )));
+        }
+        let body = response.text().await?;
+        return Ok(Document::from(body.as_str()));
+    }
+
+    pub async fn get_bangumi_info(&self, bangumi_id: i32) -> Result<String, Box<dyn Error>> {
+        let url = format!("{}/subject/{}", self.url, bangumi_id);
+        let document = self.request_html(&url).await?;
+
+        let rank_element = document.find(Name("span").and(Class("number"))).next();
+        let bangumi_rank = rank_element.map_or(Ok(0.0), |element| {
+            let rank_text = element.text();
+            rank_text
+                .parse::<f64>()
+                .map_err(|e| Box::<dyn Error>::from(e))
+        })?;
+
+        let story_element = document
+            .find(Name("div").and(Class("subject_summary")))
+            .next();
+        let bangumi_story = story_element.map_or(String::new(), |el| el.text());
+
+        let bangumi_website = document
+            .find(Name("li"))
+            .filter(|node| {
+                node.find(Class("tip"))
+                    .next()
+                    .map_or(false, |span| span.text().contains("官方网站: "))
+            })
+            .next()
+            .and_then(|li| {
+                li.text()
+                    .split("官方网站: ")
+                    .nth(1)
+                    .map(|s| s.trim().to_string())
+            })
+            .unwrap_or_default();
+
+        println!("{:?}", bangumi_rank);
+        println!("{:?}", bangumi_story);
+        println!("{:?}", bangumi_website);
+
+        Ok("1233".to_string())
+    }
 }
