@@ -17,8 +17,6 @@ pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> AnimeError {
 pub struct QbitTaskExecutor {
     pub is_login: bool,
     qbt_client: reqwest::Client,
-    username: String,
-    password: String,
     cookie: String,
     host: String,
     download_path: String,
@@ -43,8 +41,6 @@ impl QbitTaskExecutor {
                 match resp.cookies().next() {
                     Some(cookie) => Ok(Self {
                         qbt_client,
-                        username,
-                        password,
                         is_login: true,
                         cookie: format!("{}={}", cookie.name(), cookie.value()),
                         host,
@@ -82,8 +78,6 @@ impl QbitTaskExecutor {
                         log::info!("[QB API] Successfully Connect to qbittorrent web api");
                         return Ok(Self {
                             qbt_client,
-                            username: config.qb_config.username.clone(),
-                            password: config.qb_config.password.clone(),
                             is_login: true,
                             cookie: format!("{}={}", cookie.name(), cookie.value()),
                             host,
@@ -102,8 +96,6 @@ impl QbitTaskExecutor {
 
         Ok(Self {
             qbt_client,
-            username: config.qb_config.username.clone(),
-            password: config.qb_config.password.clone(),
             is_login: false,
             cookie: "".to_string(),
             host,
@@ -112,15 +104,19 @@ impl QbitTaskExecutor {
         })
     }
 
-    pub async fn relogin(&mut self) -> Result<(), AnimeError> {
+    pub async fn relogin(&mut self, config: &Config) -> Result<(), AnimeError> {
+        self.deploy_mode = config.deploy_mode.clone();
+        self.host = config.qb_config.qb_url.clone();
+        self.download_path = config.download_path.clone();
+
         let login_endpoint = self.host.clone() + "api/v2/auth/login";
 
         if let Ok(resp) = self.qbt_client
             .post(login_endpoint)
             .header("Referer", &self.host)
             .form(&[
-                ("username", &self.username),
-                ("password", &self.password),
+                ("username", config.qb_config.username.clone()),
+                ("password", config.qb_config.password.clone()),
             ])
             .send()
             .await
@@ -505,6 +501,9 @@ impl QbitTaskExecutor {
         }
     }
 }
+
+unsafe impl Send for QbitTaskExecutor {}
+
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct TorrentInfo {
     pub name: String,
@@ -592,7 +591,7 @@ mod test {
 
     #[tokio::test]
     async fn test_qb_api_add_torrent() {
-        let config = Config::load_config("./config/config.json").unwrap();
+        let config = Config::load_config("./config/config.json").await.unwrap();
         let qb_task_executor = QbitTaskExecutor::new_with_config(&config).await.unwrap();
 
         let anime_name = "test".to_string();

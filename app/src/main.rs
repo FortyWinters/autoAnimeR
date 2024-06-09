@@ -26,18 +26,20 @@ pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
-
-    let config = Config::load_config("./config/config.yaml").unwrap();
     log4rs::init_file("./config/log4rs.yaml", Default::default()).unwrap();
-
+    
+    let config = Arc::new(TokioRwLock::new(Config::load_config("./config/config.yaml").await.unwrap()));
+    
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let database_pool = Pool::builder()
         .build(ConnectionManager::<SqliteConnection>::new(database_url))
         .expect("Failed to create pool.");
 
-    let qb = Arc::new(TokioRwLock::new(QbitTaskExecutor::new_with_config(&config)
+    let conf = config.read().await;
+    let qb = Arc::new(TokioRwLock::new(QbitTaskExecutor::new_with_config(&conf)
         .await
         .expect("Failed to create qb client")));
+    drop(conf);
 
     let tastk_status = Arc::new(TokioRwLock::new(false));
     let video_file_lock = Arc::new(TokioRwLock::new(false));
@@ -57,6 +59,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(qb.clone()))
             .app_data(web::Data::new(tastk_status.clone()))
             .app_data(web::Data::new(video_file_lock.clone()))
+            .app_data(web::Data::new(config.clone()))
             .configure(anime_routes_v2)
             .configure(setting_routes_v2)
             .configure(ws_routes_v2)

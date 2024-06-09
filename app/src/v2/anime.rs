@@ -1,6 +1,7 @@
 use crate::api::do_anime_task;
 use crate::dao;
 use crate::models::{anime_broadcast, anime_list, anime_seed, anime_subgroup, anime_task};
+use crate::mods::config::Config;
 use crate::mods::qb_api::QbitTaskExecutor;
 use crate::mods::spider::{self, Mikan};
 use crate::Pool;
@@ -234,6 +235,7 @@ async fn get_anime_broadcast(
 
 #[post("/broadcast/update")]
 pub async fn update_anime_broadcast_handler(
+    config: web::Data<Arc<TokioRwLock<Config>>>,
     pool: web::Data<Pool>,
     item: web::Json<BroadcastRequestJson>,
 ) -> Result<HttpResponse, Error> {
@@ -249,7 +251,7 @@ pub async fn update_anime_broadcast_handler(
         )
     })?;
 
-    let res = update_anime_broadcast(db_connection, item.into_inner())
+    let res = update_anime_broadcast(config, db_connection, item.into_inner())
         .await
         .map_err(|e| {
             handle_error(
@@ -262,6 +264,7 @@ pub async fn update_anime_broadcast_handler(
 }
 
 async fn update_anime_broadcast(
+    config: web::Data<Arc<TokioRwLock<Config>>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: BroadcastRequestJson,
 ) -> Result<(), Error> {
@@ -308,8 +311,10 @@ async fn update_anime_broadcast(
             )
         })?;
 
-    // TODO 需要从config中读取
-    let save_path = "../../autoAnimeUI/src/assets/images/anime_list".to_string();
+    let config = config.read().await;
+    let save_path = config.img_path.clone();
+    drop(config);
+
     if !img_url_vec.is_empty() {
         let _ = join_all(
             img_url_vec

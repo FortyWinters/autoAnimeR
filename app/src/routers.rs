@@ -30,6 +30,8 @@ pub fn setting_routes_v2(cfg: &mut web::ServiceConfig) {
             .service(change_task_interval_handler)
             .service(get_task_status_handler)
             .service(reload_task_handler)
+            .service(relogin_qb_handler)
+            .service(modify_config_handler)
     );
 }
 

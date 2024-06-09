@@ -2,6 +2,7 @@ use crate::api::spider_task::do_spider_task;
 use crate::models::anime_list::AnimeListJson;
 use crate::models::anime_seed::AnimeSeed;
 use crate::models::anime_task::{AnimeTask, AnimeTaskJson};
+use crate::mods::config::Config;
 use crate::mods::{anime_filter, qb_api::QbitTaskExecutor, spider::Mikan, video_proccessor};
 use crate::v2::anime::AnimeRequestJson;
 use crate::{dao, v2};
@@ -183,14 +184,19 @@ pub async fn get_video_config(
 pub async fn create_anime_task_from_exist_files(
     video_file_lock: &Arc<TokioRwLock<bool>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    qb_task_executor: &QbitTaskExecutor,
+    qb: &Arc<TokioRwLock<QbitTaskExecutor>>,
+    config: &Arc<TokioRwLock<Config>>,
 ) -> Result<(), Error> {
-    let _guard = video_file_lock.read().await;
+    let video_file_lock = video_file_lock.read().await;
 
-    let download_path = qb_task_executor.qb_api_get_download_path().await.unwrap();
+    let qb = qb.read().await;
+    let download_path = qb.qb_api_get_download_path().await.unwrap();
+    drop(qb);
+
     let (_, video_config) = get_video_config(&download_path)
         .await
         .map_err(|e| handle_error(e, "Failed to get video config"))?;
+    drop(video_file_lock);
 
     let files = std::fs::read_dir(download_path).unwrap();
 
@@ -290,7 +296,9 @@ pub async fn create_anime_task_from_exist_files(
                 .unwrap();
 
                 // download img
-                let save_path = "../../autoAnimeUI/src/assets/images/anime_list".to_string();
+                let config = config.read().await;
+                let save_path = config.img_path.clone();
+                drop(config);
                 mikan.download_img(&img_url, &save_path).await.unwrap();
 
                 // update anime task
@@ -470,7 +478,7 @@ pub async fn download_seed_handler(
 
 #[allow(dead_code)]
 pub async fn run(
-    qb_task_executor: &QbitTaskExecutor,
+    qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) {
     // spider_task
@@ -486,16 +494,18 @@ pub async fn run(
         .success_vec;
 
     log::info!("Create anime task start");
-    create_anime_task_bulk(&mikan, qb_task_executor, db_connection)
+    let qb = qb_task_executor.read().await;
+    create_anime_task_bulk(&mikan, &qb, db_connection)
         .await
         .unwrap();
+    drop(qb);
     log::info!("Create anime task done");
 }
 
 #[allow(dead_code)]
 pub async fn run_task(
     status: &Arc<TokioRwLock<bool>>,
-    qb_task_executor: &QbitTaskExecutor,
+    qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) {
     let interval = 120;
@@ -531,7 +541,7 @@ pub async fn exit_task(status: &Arc<TokioRwLock<bool>>) {
 pub async fn change_task_interval(
     interval: i32,
     status: &Arc<TokioRwLock<bool>>,
-    qb_task_executor: &QbitTaskExecutor,
+    qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) {
     let interval_sec = interval as u64 * 60;
@@ -782,7 +792,7 @@ mod test {
     #[tokio::test]
     pub async fn test() {
         dotenv::dotenv().ok();
-        let config = Config::load_config("./config/config.json").unwrap();
+        let config = Config::load_config("./config/config.json").await.unwrap();
 
         let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let database_pool = Pool::builder()

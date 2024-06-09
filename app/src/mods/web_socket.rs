@@ -91,7 +91,7 @@ impl StreamHandler<Result<WSMessage, ws::ProtocolError>> for WebSocketActor {
 
 impl WebSocketActor {
     pub async fn new() -> Self {
-        let config = Config::load_config("./config/config.yaml").unwrap();
+        let config = Config::load_config("./config/config.yaml").await.unwrap();
         WebSocketActor {
             qb: QbitTaskExecutor::new_with_config(&config)
                 .await
