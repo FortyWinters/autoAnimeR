@@ -814,3 +814,38 @@ pub async fn task_update(
         })?;
     Ok(())
 }
+
+#[get("/search/{keyword}")]
+pub async fn search_anime_handler(
+    pool: web::Data<Pool>,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse, Error> {
+    log::info!("search_anime_handler: /search {:?}", path.0);
+
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "search_anime_handler, failed to get db connection"))?;
+
+    let res = search_anime(db_connection, path.0.clone())
+        .await
+        .map_err(|e| handle_error(e, "search_anime_handler, search_anime failed"))?;
+
+    Ok(HttpResponse::Ok().json(res))
+}
+
+async fn search_anime(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    keyword: String,
+) -> Result<Vec<anime_list::AnimeList>, Error> {
+    let mut result = dao::anime_list::search_by_anime_name(db_connection, &keyword)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                "search_anime, dao::anime_list::search_by_anime_name failed",
+            )
+        })?;
+    result.sort_by(|a, b| b.subscribe_status.cmp(&a.subscribe_status));
+
+    Ok(result)
+}

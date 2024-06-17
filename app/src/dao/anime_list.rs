@@ -153,6 +153,16 @@ pub async fn get_mikanid_by_anime_name(
     Ok(result.mikan_id)
 }
 
+#[allow(dead_code)]
+pub async fn search_by_anime_name(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_keyword: &String
+) -> Result<Vec<AnimeList>, diesel::result::Error> {
+    let pattern = format!("%{}%", query_keyword);
+    let results = anime_list.filter(anime_name.like(pattern)).load::<AnimeList>(db_connection)?;
+    Ok(results)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

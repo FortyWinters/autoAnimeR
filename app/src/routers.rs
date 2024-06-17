@@ -18,6 +18,7 @@ pub fn anime_routes_v2(cfg: &mut web::ServiceConfig) {
             .service(get_anime_detail_handler)
             .service(task_delete_handler)
             .service(task_update_handler)
+            .service(search_anime_handler)
     );
 }
 
