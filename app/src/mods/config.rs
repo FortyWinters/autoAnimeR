@@ -2,10 +2,22 @@ use crate::api::do_anime_task::handle_error;
 use anyhow::Error;
 use serde::{Deserialize, Serialize};
 use serde_yml;
-use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{Read, Seek, Write};
 use std::path::Path;
+
+macro_rules! update_fields {
+    ($self:ident, $new_config_val:ident, { $($field:ident),* }) => {
+        $(
+            $self.$field = $new_config_val.$field.to_string();
+        )*
+    };
+    ($self:ident, $new_config_val:ident, $config:ident, { $($field:ident),* }) => {
+        $(
+            $self.$config.$field = $new_config_val.$config.$field.to_string();
+        )*
+    };
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QbConfig {
@@ -69,37 +81,10 @@ impl Config {
     #[allow(dead_code)]
     pub async fn modify_filed(
         &mut self,
-        modify_list: &HashMap<String, String>,
+        new_config_val: &Config,
     ) -> Result<(), Error> {
-        for (filed, val) in modify_list.into_iter() {
-            match filed.as_str() {
-                "download_path" => {
-                    self.download_path = val.to_string();
-                    log::info!("update download_path: {}", val);
-                }
-                "img_path" => {
-                    self.img_path = val.to_string();
-                    log::info!("update img_path: {}", val);
-                }
-                "ui_url" => {
-                    self.ui_url = val.to_string();
-                    log::info!("update ui_url: {}", val);
-                }
-                "qb_url" => {
-                    self.qb_config.qb_url = val.to_string();
-                    log::info!("update qb_url: {}", val);
-                }
-                "username" => {
-                    self.qb_config.username = val.to_string();
-                    log::info!("update username: {}", val);
-                }
-                "password" => {
-                    self.qb_config.password = val.to_string();
-                    log::info!("update password: {}", val);
-                }
-                _ => {}
-            }
-        }
+        update_fields!(self, new_config_val, { download_path, img_path, ui_url });
+        update_fields!(self, new_config_val, qb_config, { qb_url, username, password });
 
         let path = Path::new("./config/config.yaml");
         let mut file = OpenOptions::new()
@@ -125,9 +110,18 @@ mod test {
     #[tokio::test]
     pub async fn test() {
         let mut config = Config::load_config("./config/config.yaml").await.unwrap();
-        let mut modify_list = HashMap::new();
-        modify_list.insert("download_path".to_string(), "downloads".to_string());
-        config.modify_filed(&modify_list).await.unwrap();
+        let new_config_val = Config {
+            deploy_mode: "".to_string(),
+            download_path: "".to_string(),
+            img_path: "".to_string(),
+            ui_url: "".to_string(),
+            qb_config: QbConfig {
+                qb_url: "".to_string(),
+                username: "".to_string(),
+                password: "".to_string(),
+            },
+        };
+        config.modify_filed(&new_config_val).await.unwrap();
         println!("{:?}", config);
     }
 }

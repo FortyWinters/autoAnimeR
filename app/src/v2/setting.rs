@@ -5,7 +5,7 @@ use crate::Pool;
 use actix_web::{get, post, web, Error, HttpResponse};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TaskInterval {
@@ -112,19 +112,22 @@ pub async fn relogin_qb_handler(
         Err(_) => HttpResponse::from(HttpResponse::InternalServerError()),
     })
 }
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ModifyList {
-    pub modify_list: HashMap<String, String>,
-}
 
 #[post("/modify_config")]
 pub async fn modify_config_handler(
-    item: web::Json<ModifyList>,
+    item: web::Json<Config>,
     config: web::Data<Arc<TokioRwLock<Config>>>,
 ) -> Result<HttpResponse, Error> {
     let mut config = config.write().await;
-    Ok(match config.modify_filed(&item.modify_list).await {
-        Ok(_) => HttpResponse::Ok().body("ok"),
-        Err(_) => HttpResponse::from(HttpResponse::InternalServerError()),
+
+    Ok(match config.modify_filed(&item).await {
+        Ok(_) => {
+            log::info!("update config with new value: {:?}", &item);
+            HttpResponse::Ok().body("ok")
+        },
+        Err(_) => {
+            log::warn!("Failed to update config with new value: {:?}", &item);
+            HttpResponse::from(HttpResponse::InternalServerError())
+        }
     })
 }

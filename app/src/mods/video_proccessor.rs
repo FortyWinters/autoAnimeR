@@ -274,25 +274,23 @@ mod test {
 
     #[tokio::test]
     pub async fn test_get_subtitle_info() {
-        let input_file = "/Users/heason/Documents/anime/吹响！悠风号 第三季(3290)/吹响！悠风号 第三季 - 3 - ANi.mp4".to_string();
-        // let input_file = "/Users/heason/Documents/anime/末班列车去哪里了？(3305)/末班列车去哪里了？ - 1 - LoliHouse.mkv".to_string();
+        let input_file = "".to_string();
         let t = get_subtitle_info(&input_file).await.unwrap();
         println!("{:?}", t);
     }
 
     #[tokio::test]
     pub async fn test_extract() {
-        // let input_file = "/Users/heason/Documents/anime/吹响！悠风号 第三季(3290)/吹响！悠风号 第三季 - 3 - ANi.mp4".to_string();
-        let input_file = "/Users/heason/Documents/anime/末班列车去哪里了？(3305)/末班列车去哪里了？ - 1 - LoliHouse.mkv".to_string();
+        let input_file = "".to_string();
         let t = extract_subtitle(&input_file).await.unwrap();
         println!("{:?}", t);
     }
 
     #[tokio::test]
     pub async fn test_mp4() {
-        let input_file = "/Users/heason/Documents/anime/吹响！悠风号 第三季(3290)/吹响！悠风号 第三季 - 3 - ANi.mp4".to_string();
+        let input_file = "".to_string();
         let output_file =
-            "/Users/heason/Documents/anime/吹响！悠风号 第三季(3290)/2.ass".to_string();
+            "".to_string();
         let t = extract_mp4_subtitle(2 as usize, &input_file, &output_file)
             .await
             .unwrap();
