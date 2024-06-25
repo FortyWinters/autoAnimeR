@@ -7,14 +7,18 @@ use std::io::{Read, Seek, Write};
 use std::path::Path;
 
 macro_rules! update_fields {
-    ($self:ident, $new_config_val:ident, { $($field:ident),* }) => {
+    ($self:ident, $modify_list:ident, { $($field:ident),* }) => {
         $(
-            $self.$field = $new_config_val.$field.to_string();
+            if  "" != $modify_list.$field {
+                $self.$field = $modify_list.$field.clone();
+            }
         )*
     };
-    ($self:ident, $new_config_val:ident, $config:ident, { $($field:ident),* }) => {
+    ($self:ident, $modify_list:ident, $config:ident, { $($field:ident),* }) => {
         $(
-            $self.$config.$field = $new_config_val.$config.$field.to_string();
+            if "" != $modify_list.$config.$field {
+                $self.$config.$field = $modify_list.$config.$field.clone();
+            }
         )*
     };
 }
@@ -54,7 +58,11 @@ impl Config {
             Ok(contents) => {
                 let config = serde_yml::from_str(&contents)
                     .map_err(|e| handle_error(e, "Failed to parse config file."))?;
-                log::info!("Successfully load config from {}, config detail: {:?}", path, config);
+                log::info!(
+                    "Successfully load config from {}, config detail: {:?}",
+                    path,
+                    config
+                );
                 Ok(config)
             }
             Err(e) => {
@@ -63,7 +71,7 @@ impl Config {
             }
         }
     }
-    
+
     #[allow(dead_code)]
     pub async fn reload_config(&mut self) -> Result<(), Error> {
         let path = "./config/config.yaml";
@@ -71,7 +79,11 @@ impl Config {
             let new_config = serde_yml::from_str(&contents)
                 .map_err(|e| handle_error(e, "Failed to parse config file."))?;
             let _ = std::mem::replace(self, new_config);
-            log::info!("Successfully reload config from {}, new config detail: {:?}", path, self);
+            log::info!(
+                "Successfully reload config from {}, new config detail: {:?}",
+                path,
+                self
+            );
         } else {
             log::warn!("Failed to reload config from: {}", path);
         }
@@ -79,11 +91,8 @@ impl Config {
     }
 
     #[allow(dead_code)]
-    pub async fn modify_filed(
-        &mut self,
-        new_config_val: &Config,
-    ) -> Result<(), Error> {
-        update_fields!(self, new_config_val, { download_path, img_path, ui_url });
+    pub async fn modify_filed(&mut self, new_config_val: &Config) -> Result<(), Error> {
+        update_fields!(self, new_config_val, { deploy_mode, download_path, img_path, ui_url });
         update_fields!(self, new_config_val, qb_config, { qb_url, username, password });
 
         let path = Path::new("./config/config.yaml");

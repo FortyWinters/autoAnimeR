@@ -122,12 +122,22 @@ pub async fn modify_config_handler(
 
     Ok(match config.modify_filed(&item).await {
         Ok(_) => {
-            log::info!("update config with new value: {:?}", &item);
+            log::info!("update config with new value: {:?}", &config);
             HttpResponse::Ok().body("ok")
-        },
+        }
         Err(_) => {
             log::warn!("Failed to update config with new value: {:?}", &item);
             HttpResponse::from(HttpResponse::InternalServerError())
         }
     })
+}
+
+#[get("/get_config")]
+pub async fn get_config_handler(
+    config: web::Data<Arc<TokioRwLock<Config>>>,
+) -> Result<HttpResponse, Error> {
+    let config = config.read().await;
+    let json = serde_json::to_string(&config.clone())?;
+    log::info!("get config: {}", json);
+    Ok(HttpResponse::Ok().body(json))
 }
