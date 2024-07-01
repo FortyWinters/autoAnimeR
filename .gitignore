@@ -29,3 +29,5 @@ diesel.toml
 var
 
 downloads
+
+.vscode

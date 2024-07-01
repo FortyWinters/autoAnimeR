@@ -48,6 +48,7 @@ pub struct Subgroup {
     pub subgroup_name: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Broadcast {
     pub mikan_id: i32,

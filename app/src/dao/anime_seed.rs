@@ -5,6 +5,7 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::{delete, RunQueryDsl};
 
+#[allow(dead_code)]
 pub struct DaoResponse<T> {
     pub success_vec: Vec<T>,
     pub failed_vec: Vec<T>,

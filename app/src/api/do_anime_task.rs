@@ -289,7 +289,7 @@ pub async fn create_anime_task_from_exist_files(
                         bangumi_id: -1,
                         bangumi_rank: "".to_string(),
                         bangumi_summary: "".to_string(),
-                        website: "".to_string()
+                        website: "".to_string(),
                     },
                 )
                 .await
@@ -666,6 +666,14 @@ pub async fn auto_rename_handler(
                 )
             })?;
             video_config.insert(cur_file_name, cur_config);
+            qb.qb_api_del_torrent(&task.torrent_name)
+                .await
+                .map_err(|e| {
+                    handle_error(
+                        e,
+                        format!("Failed to delete task for qb: {:?}", task).as_str(),
+                    )
+                })?;
         } else {
             log::info!("Failed to execute rename task for anime_task: {:?}", task);
         }
