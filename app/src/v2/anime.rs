@@ -1,5 +1,6 @@
 use crate::api::do_anime_task;
 use crate::dao;
+use crate::models::anime_subgroup::AnimeSubgroup;
 use crate::models::{anime_broadcast, anime_list, anime_seed, anime_subgroup, anime_task};
 use crate::mods::config::Config;
 use crate::mods::qb_api::QbitTaskExecutor;
@@ -706,6 +707,37 @@ pub struct AnimeDetail {
     pub subgroup_info: Vec<anime_subgroup::AnimeSubgroup>,
     pub task_info: Vec<anime_task::AnimeTask>,
 }
+
+fn reoder_subgroups(subgroup_vec: Vec<AnimeSubgroup>) -> Vec<AnimeSubgroup> {
+    let mut subgroup_583 = None; // ANi
+    let mut subgroup_382 = None; // 喵萌奶茶屋
+    let mut subgroup_370 = None; // LoliHouse
+    let mut other_subgroups = Vec::new();
+
+    for subgroup in subgroup_vec {
+        match subgroup.subgroup_id {
+            583 => subgroup_583 = Some(subgroup),
+            382 => subgroup_382 = Some(subgroup),
+            370 => subgroup_370 = Some(subgroup),
+            _ => other_subgroups.push(subgroup),
+        }
+    }
+
+    let mut reordered_subgroups = Vec::new();
+    if let Some(subgroup) = subgroup_583 {
+        reordered_subgroups.push(subgroup);
+    }
+    if let Some(subgroup) = subgroup_382 {
+        reordered_subgroups.push(subgroup);
+    }
+    if let Some(subgroup) = subgroup_370 {
+        reordered_subgroups.push(subgroup);
+    }
+    reordered_subgroups.extend(other_subgroups);
+
+    reordered_subgroups
+}
+
 async fn get_anime_detail(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     mikan_id: i32,
@@ -721,17 +753,18 @@ async fn get_anime_detail(
     let seed_vec = get_anime_seed(db_connection, mikan_id)
         .await
         .map_err(|e| handle_error(e, "get_anime_detail, get_anime_seed failed"))?;
-    let subgroup_vec = get_subgroup(db_connection)
-        .await
-        .map_err(|e| handle_error(e, "get_anime_detail, get_subgroup failed"))?;
     let task_vec = get_task(db_connection, mikan_id)
         .await
         .map_err(|e| handle_error(e, "get_anime_detail, get_task failed"))?;
+    let subgroup_vec = get_subgroup(db_connection)
+        .await
+        .map_err(|e| handle_error(e, "get_anime_detail, get_subgroup failed"))?;
+    let reorderd_subgroups = reoder_subgroups(subgroup_vec);
 
     let anime_detail = AnimeDetail {
         anime_info: anime,
         seed_info: seed_vec,
-        subgroup_info: subgroup_vec,
+        subgroup_info: reorderd_subgroups,
         task_info: task_vec,
     };
     Ok(anime_detail)
