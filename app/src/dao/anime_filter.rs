@@ -9,7 +9,7 @@ use std::collections::HashSet;
 // global
 #[allow(dead_code)]
 pub async fn add_global_subgroup_filter(
-    query_subgroup: i32,
+    query_subgroup: &i32,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<AnimeFilter, diesel::result::Error> {
     match anime_filter
@@ -55,18 +55,23 @@ pub async fn delete_global_subgroup_filter_by_subgroup_id(
 #[allow(dead_code)]
 pub async fn get_global_subgroup_filter_set(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-) -> HashSet<i32> {
-    let mut subgroup_set: HashSet<i32> = HashSet::new();
+) -> (HashSet<i32>, HashSet<i32>) {
+    let mut perference_sub_set: HashSet<i32> = HashSet::new();
+    let mut avoid_sub_set: HashSet<i32> = HashSet::new();
     if let Ok(result_vec) = anime_filter
         .filter(filter_type.eq(&"subgroup"))
         .filter(object.eq(&1))
         .load::<AnimeFilter>(db_connection)
     {
         for result in result_vec {
-            subgroup_set.insert(result.filter_val);
+            if result.filter_val > 0 {
+                perference_sub_set.insert(result.filter_val);
+            } else {
+                avoid_sub_set.insert(result.filter_val);
+            }
         }
     }
-    subgroup_set
+    (perference_sub_set, avoid_sub_set)
 }
 
 // local
@@ -110,10 +115,10 @@ pub async fn delete_local_subgroup_filter_by_mikan_id(
     Ok(delete(
         anime_filter
             .filter(mikan_id.eq(&quary_mikan_id))
-            .filter(filter_type.eq(&"subgroup")),
+            .filter(filter_type.eq(&"subgroup"))
+            .filter(filter_val.eq(&query_subgroup))
+            .filter(object.eq(0)),
     )
-    .filter(filter_val.eq(&query_subgroup))
-    .filter(object.eq(0))
     .execute(db_connection)
     .expect("Error delete global subgroup filter"))
 }
@@ -121,10 +126,11 @@ pub async fn delete_local_subgroup_filter_by_mikan_id(
 // local
 #[allow(dead_code)]
 pub async fn get_local_subgroup_filter_set_by_mikan_id(
-    quary_mikan_id: i32,
+    quary_mikan_id: &i32,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-) -> Result<HashSet<i32>, diesel::result::Error> {
-    let mut subgroup_set: HashSet<i32> = HashSet::new();
+) -> Result<(HashSet<i32>, HashSet<i32>), diesel::result::Error> {
+    let mut perference_sub_set: HashSet<i32> = HashSet::new();
+    let mut avoid_sub_set: HashSet<i32> = HashSet::new();
     if let Ok(result_vec) = anime_filter
         .filter(mikan_id.eq(&quary_mikan_id))
         .filter(filter_type.eq(&"subgroup"))
@@ -132,10 +138,14 @@ pub async fn get_local_subgroup_filter_set_by_mikan_id(
         .load::<AnimeFilter>(db_connection)
     {
         for result in result_vec {
-            subgroup_set.insert(result.filter_val);
+            if result.filter_val > 0 {
+                perference_sub_set.insert(result.filter_val);
+            } else {
+                avoid_sub_set.insert(result.filter_val);
+            }
         }
     }
-    Ok(subgroup_set)
+    Ok((perference_sub_set, avoid_sub_set))
 }
 
 // local
@@ -188,9 +198,9 @@ pub async fn delete_local_episode_filter_by_mikan_id(
     Ok(delete(
         anime_filter
             .filter(mikan_id.eq(&quary_mikan_id))
-            .filter(filter_type.eq(&"episode")),
+            .filter(filter_type.eq(&"episode"))
+            .filter(object.eq(0)),
     )
-    .filter(object.eq(0))
     .execute(db_connection)
     .expect("Error delete global subgroup filter"))
 }

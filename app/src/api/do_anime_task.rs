@@ -8,7 +8,6 @@ use crate::v2::anime::AnimeRequestJson;
 use crate::{dao, v2};
 
 use anyhow::Error;
-// use actix_web::Error;
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::SqliteConnection;
 use futures::future::join_all;
@@ -16,7 +15,7 @@ use log;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{prelude::*, Read, Write};
 use std::sync::Arc;
@@ -50,33 +49,21 @@ pub async fn create_anime_task_bulk(
         .await
         .unwrap();
     log::info!("anime list: {:?}", anime_list_vec);
-    // println!("{:?}", anime_list_vec);
 
     // 得到订阅的全部种子
-    let mut anime_seed_vec: Vec<AnimeSeed> = Vec::new();
+    let mut anime_seed_map: HashMap<i32, Vec<AnimeSeed>> = HashMap::new();
     for anime_list in anime_list_vec {
         let ret_anime_seeds =
             dao::anime_seed::get_anime_seed_by_mikan_id(db_connection, anime_list.mikan_id)
                 .await
                 .unwrap();
-        for anime_seed in ret_anime_seeds {
-            anime_seed_vec.push(anime_seed);
-        }
+        anime_seed_map.insert(anime_list.mikan_id, ret_anime_seeds);
     }
 
     // 过滤并下载
-    let mut anime_task_set = dao::anime_task::get_exist_anime_task_set(db_connection)
+    filter_and_download(&mikan, qb_task_executor, db_connection, anime_seed_map)
         .await
         .unwrap();
-    filter_and_download(
-        &mikan,
-        qb_task_executor,
-        db_connection,
-        anime_seed_vec,
-        &mut anime_task_set,
-    )
-    .await
-    .unwrap();
 
     Ok(())
 }
@@ -99,20 +86,11 @@ pub async fn create_anime_task_single(
             .await
             .unwrap();
 
-    let mut anime_task_set =
-        dao::anime_task::get_exist_anime_task_set_by_mikanid(db_connection, mikan_id)
-            .await
-            .unwrap();
+    let anime_seed_map = vec![(mikan_id, anime_seed_vec)].into_iter().collect();
 
-    filter_and_download(
-        &mikan,
-        &qb_task_executor,
-        db_connection,
-        anime_seed_vec,
-        &mut anime_task_set,
-    )
-    .await
-    .unwrap();
+    filter_and_download(&mikan, &qb_task_executor, db_connection, anime_seed_map)
+        .await
+        .unwrap();
 
     Ok(())
 }
@@ -338,18 +316,16 @@ pub async fn filter_and_download(
     mikan: &Mikan,
     qb_task_executor: &QbitTaskExecutor,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    anime_seed_vec: Vec<AnimeSeed>,
-    anime_task_set: &mut HashSet<(i32, i32)>,
+    anime_seed_map: HashMap<i32, Vec<AnimeSeed>>,
 ) -> Result<(), Error> {
+    let anime_task_set = dao::anime_task::get_exist_anime_task_set(db_connection)
+        .await
+        .unwrap();
+
     // 过滤出新种子
-    // let new_anime_seed_vec = anime_filter::filter_anime_bulk(anime_seed_vec, anime_task_set).await.unwrap();
-    let new_anime_seed_vec = anime_filter::filter_anime_bulk_with_anime_filter(
-        db_connection,
-        anime_seed_vec,
-        anime_task_set,
-    )
-    .await
-    .unwrap();
+    let new_anime_seed_vec = anime_filter::filter_v3(db_connection, anime_seed_map, anime_task_set)
+        .await
+        .unwrap();
 
     log::info!("new anime seed: {:?}", new_anime_seed_vec);
     // println!("new_anime_seed_vec: {:?}", new_anime_seed_vec);
@@ -789,6 +765,27 @@ pub async fn rename_file(
             subtitle: subtitle_vec,
         },
     ))
+}
+
+#[allow(dead_code)]
+pub async fn add_default_filter(
+    config: &Arc<TokioRwLock<Config>>,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<(), Error> {
+    let config = config.read().await;
+
+    for sub in &config.anime_config.subgroup_filter.preference {
+        let _ = dao::anime_filter::add_global_subgroup_filter(sub, db_connection)
+            .await
+            .unwrap();
+    }
+
+    for sub in &config.anime_config.subgroup_filter.avoid {
+        let _ = dao::anime_filter::add_global_subgroup_filter(&-sub, db_connection)
+            .await
+            .unwrap();
+    }
+    Ok(())
 }
 
 #[cfg(test)]

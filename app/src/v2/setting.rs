@@ -115,12 +115,12 @@ pub async fn relogin_qb_handler(
 
 #[post("/modify_config")]
 pub async fn modify_config_handler(
-    item: web::Json<Config>,
+    mut item: web::Json<Config>,
     config: web::Data<Arc<TokioRwLock<Config>>>,
 ) -> Result<HttpResponse, Error> {
     let mut config = config.write().await;
 
-    Ok(match config.modify_filed(&item).await {
+    Ok(match config.modify_filed(&mut item).await {
         Ok(_) => {
             log::info!("update config with new value: {:?}", &config);
             HttpResponse::Ok().body("ok")

@@ -6,3 +6,12 @@ qb_config:
   qb_url: http://127.0.0.1:8081/
   username: admin
   password: adminadmin
+anime_config:
+  subgroup_filter:
+    preference:
+      - 370 # LoliHouse
+      - 382 # 喵萌奶茶屋
+      - 583 # ANI
+    avoid:
+      - 615 # Kirara Fantasia
+      - 202 # 生肉

@@ -45,6 +45,8 @@ async fn main() -> std::io::Result<()> {
     let video_file_lock = Arc::new(TokioRwLock::new(false));
     let mut db_connection = database_pool.get().unwrap();
 
+    do_anime_task::add_default_filter(&config, &mut db_connection).await.unwrap();
+
     let qb_for_task = Arc::clone(&qb);
     let video_file_lock_for_task = Arc::clone(&video_file_lock);
     spawn(async move {
