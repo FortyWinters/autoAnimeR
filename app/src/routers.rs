@@ -48,5 +48,6 @@ pub fn video_routes_v2(cfg: &mut web::ServiceConfig) {
         web::scope("/v2/video")
             .service(get_anime_task_handler)
             .service(get_subtitle_path_handler)
+            .service(extract_subtitle_handle)
     );
 }

@@ -559,25 +559,27 @@ pub struct VideoConfig {
 }
 
 #[allow(dead_code)]
-pub async fn auto_update_and_rename(
+pub async fn auto_update_rename_extract(
     video_file_lock: &Arc<TokioRwLock<bool>>,
     db_connection: &mut PooledConnection<ConnectionManager<diesel::SqliteConnection>>,
     qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
 ) -> Result<(), Error> {
     log::info!("Start auto rename and update thread");
     loop {
-        let nb_new_finished_task = auto_update_anime_task_handler(&qb_task_executor, db_connection)
+        let nb_new_finished_task = auto_update_handler(&qb_task_executor, db_connection)
             .await
             .map_err(|e| handle_error(e, "Failed to get finished task"))?;
 
         if nb_new_finished_task > 0 {
-            let _ = auto_rename_handler(&video_file_lock, &qb_task_executor, db_connection).await;
+            auto_rename_and_extract_handler(&video_file_lock, &qb_task_executor, db_connection)
+                .await
+                .map_err(|e| handle_error(e, "Failed to execute rename task"))?;
         }
         sleep(Duration::from_secs(5)).await;
     }
 }
 
-pub async fn auto_update_anime_task_handler(
+pub async fn auto_update_handler(
     qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<i32, Error> {
@@ -606,12 +608,12 @@ pub async fn auto_update_anime_task_handler(
 }
 
 #[allow(dead_code)]
-pub async fn auto_rename_handler(
+pub async fn auto_rename_and_extract_handler(
     video_file_lock: &Arc<TokioRwLock<bool>>,
     qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<(), Error> {
-    let _guard = video_file_lock.write().await; // 获取写锁
+    let _guard = video_file_lock.write().await;
     let qb = qb_task_executor.read().await;
     let download_path = qb.qb_api_get_download_path().await.unwrap();
 
@@ -625,8 +627,12 @@ pub async fn auto_rename_handler(
 
     log::debug!("{:?}", task_list);
 
+    // rename -> extract -> write VideoConfig
     for task in task_list {
-        if let Ok((cur_file_name, cur_config)) = rename_file(&qb, db_connection, &task).await {
+        // rename
+        if let Ok((cur_file_name, cur_total_file_path)) =
+            rename_file(&qb, db_connection, &task).await
+        {
             dao::anime_task::update_task_status(
                 db_connection,
                 &task.torrent_name,
@@ -641,6 +647,26 @@ pub async fn auto_rename_handler(
                     format!("Failed to update task status for anime_task: {:?}", task).as_str(),
                 )
             })?;
+
+            // extract subtitles
+            let mut subtitle_vec: Vec<String> = vec![];
+            let extension = cur_file_name.split(".").last().unwrap();
+            if extension == "mkv" || extension == "mp4" {
+                if let Ok(res) = video_proccessor::extract_subtitle(&cur_total_file_path).await {
+                    subtitle_vec = res;
+                } else {
+                    log::warn!("");
+                }
+            }
+
+            // write VideoConfig
+            let cur_config = VideoConfig {
+                torrent_hash: task.torrent_name.clone(),
+                mikan_id: task.mikan_id,
+                episode: task.episode,
+                subtitle_nb: subtitle_vec.len() as i32,
+                subtitle: subtitle_vec,
+            };
             video_config.insert(cur_file_name, cur_config);
             qb.qb_api_del_torrent(&task.torrent_name)
                 .await
@@ -671,7 +697,7 @@ pub async fn rename_file(
     qb_task_executor: &QbitTaskExecutor,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     anime_task: &AnimeTask,
-) -> Result<(String, VideoConfig), Error> {
+) -> Result<(String, String), Error> {
     let path = qb_task_executor
         .qb_api_get_download_path()
         .await
@@ -741,30 +767,7 @@ pub async fn rename_file(
 
     let _ = fs::rename(&total_path, &new_total_path);
 
-    let mut subtitle_vec: Vec<String> = vec![];
-    if extension == "mkv" || extension == "mp4" {
-        if let Ok(res) = video_proccessor::extract_subtitle(&new_total_path).await {
-            subtitle_vec = res;
-        } else {
-            log::warn!("");
-        }
-    }
-
-    Ok((
-        new_file_name,
-        VideoConfig {
-            torrent_hash: anime_task
-                .torrent_name
-                .split('.')
-                .next()
-                .unwrap()
-                .to_string(),
-            mikan_id: anime_task.mikan_id,
-            episode: anime_task.episode,
-            subtitle_nb: subtitle_vec.len() as i32,
-            subtitle: subtitle_vec,
-        },
-    ))
+    Ok((new_file_name, new_total_path))
 }
 
 #[allow(dead_code)]
@@ -797,7 +800,7 @@ mod test {
     #[tokio::test]
     pub async fn test() {
         dotenv::dotenv().ok();
-        let config = Config::load_config("./config/config.json").await.unwrap();
+        let config = Config::load_config("./config/config.yaml").await.unwrap();
 
         let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let database_pool = Pool::builder()
@@ -812,6 +815,6 @@ mod test {
 
         let video_file_lock = Arc::new(TokioRwLock::new(false));
         let _ =
-            auto_update_and_rename(&video_file_lock, &mut database_pool.get().unwrap(), &qb).await;
+            auto_update_rename_extract(&video_file_lock, &mut database_pool.get().unwrap(), &qb).await;
     }
 }

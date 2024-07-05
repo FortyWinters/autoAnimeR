@@ -51,7 +51,7 @@ async fn main() -> std::io::Result<()> {
     let video_file_lock_for_task = Arc::clone(&video_file_lock);
     spawn(async move {
         let _ =
-            do_anime_task::auto_update_and_rename(&video_file_lock_for_task, &mut db_connection, &qb_for_task)
+            do_anime_task::auto_update_rename_extract(&video_file_lock_for_task, &mut db_connection, &qb_for_task)
                 .await;
     });
 
