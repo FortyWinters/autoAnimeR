@@ -737,7 +737,7 @@ pub async fn rename_file(
     log::debug!("extension: {}", extension);
 
     let quary_item = format!("%{}", anime_task.torrent_name);
-    let subgroup_id = dao::anime_seed::get_anime_seed_by_seed_url(db_connection, quary_item)
+    let subgroup_id = dao::anime_seed::get_anime_seed_by_seed_url(db_connection, &quary_item)
         .await
         .map_err(|e| handle_error(e, "Failed to get subgroup_id"))?
         .subgroup_id;

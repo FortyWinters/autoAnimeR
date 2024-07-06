@@ -1,5 +1,4 @@
 use crate::api::do_anime_task::{self, VideoConfig};
-use crate::models::anime_task::AnimeTask;
 use crate::mods::qb_api::QbitTaskExecutor;
 use crate::mods::video_proccessor;
 use crate::{dao, Pool};
@@ -18,61 +17,83 @@ pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> actix_web::Error
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct VideoInfoRequestJson {
+pub struct TorrentName {
     pub torrent_name: String,
 }
 
-#[post("/get_anime_task")]
-pub async fn get_anime_task_handler(
-    item: web::Json<VideoInfoRequestJson>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VideoDetail {
+    pub anime_name: String,
+    pub subgroup_name: String,
+    pub video_path: String,
+    pub subtitle_vec: Vec<String>,
+}
+
+#[post("/get_video_detail")]
+pub async fn get_video_detail_handler(
+    item: web::Json<TorrentName>,
+    video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
     pool: web::Data<Pool>,
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool
         .get()
         .map_err(|e| handle_error(e, "failed to get db connection"))?;
-    let res = get_anime_task(&item.torrent_name, db_connection)
+    let res = get_anime_detail(&item.torrent_name, video_file_lock, qb, db_connection)
         .await
         .unwrap();
     Ok(HttpResponse::Ok().json(res))
 }
 
-async fn get_anime_task(
+async fn get_anime_detail(
     torrent_name: &String,
+    video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
+    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-) -> Result<AnimeTask, Error> {
-    let res = dao::anime_task::get_by_torrent_name(db_connection, torrent_name)
+) -> Result<VideoDetail, Error> {
+    let anime_task = dao::anime_task::get_by_torrent_name(db_connection, torrent_name)
         .await
         .map_err(|e| handle_error(e, "dao::anime_task::get_by_torrent_name failed"))?;
 
-    Ok(res)
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VideoName {
-    pub video_name: String,
-}
-#[post("/get_subtitle_path")]
-pub async fn get_subtitle_path_handler(
-    item: web::Json<VideoName>,
-    video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
-    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
-) -> Result<HttpResponse, Error> {
-    let subtitles = get_subtitle_path(&item.video_name, video_file_lock, qb)
+    let subgroup_id = dao::anime_seed::get_anime_seed_by_seed_url(db_connection, torrent_name)
         .await
-        .map_err(|e| handle_error(e, "get_subtitle_path_handler failed"))?;
+        .map_err(|e| handle_error(e, "dao::anime_task::get_by_torrent_name failed"))?
+        .subgroup_id;
 
-    log::info!("subtitles: {:?}", subtitles);
+    let anime_name = dao::anime_list::get_by_mikanid(db_connection, anime_task.mikan_id)
+        .await
+        .map_err(|e| handle_error(e, "dao::anime_task::get_by_torrent_name failed"))?
+        .anime_name;
 
-    let res = if subtitles.len() > 1 {
-        subtitles[0].clone()
-    } else {
-        String::new()
+    let subgroup_name = dao::anime_subgroup::get_by_subgroupid(db_connection, &subgroup_id)
+        .await
+        .map_err(|e| handle_error(e, "dao::anime_task::get_by_torrent_name failed"))?
+        .subgroup_name;
+
+    let file_path = format!("{}({})", anime_name, anime_task.mikan_id);
+
+    let video_path = format!("{}/{}", file_path, anime_task.filename);
+
+    let subtitle_vec = match get_subtitle_vec(&anime_task.filename, video_file_lock, qb).await {
+        Ok(res) => res
+            .into_iter()
+            .map(|s| format!("{}/{}", file_path, s))
+            .collect(),
+        Err(_) => {
+            log::warn!("Failed to get subtitle for torrent: {}", torrent_name);
+            Vec::new()
+        }
     };
 
-    Ok(HttpResponse::Ok().json(res))
+    Ok(VideoDetail {
+        anime_name,
+        subgroup_name,
+        video_path,
+        subtitle_vec,
+    })
 }
 
-async fn get_subtitle_path(
+async fn get_subtitle_vec(
     video_name: &String,
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
     qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
@@ -98,7 +119,7 @@ async fn get_subtitle_path(
 
 #[post("/extract_subtitle")]
 pub async fn extract_subtitle_handle(
-    item: web::Json<VideoInfoRequestJson>,
+    item: web::Json<TorrentName>,
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
     qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
     pool: web::Data<Pool>,
@@ -220,14 +241,15 @@ mod test {
         let db_connection = &mut database_pool.get().unwrap();
 
         let video_file_lock = Arc::new(TokioRwLock::new(false));
-
-        extract_subtitle(
-            &"da884080bade6f74ef533cba97dd6c125773ac40.torrent".to_string(),
+        let res = get_anime_detail(
+            &"cf86dfac0c05125eac6fa800f4f1ee6227e12a2e.torrent".to_string(),
             web::Data::new(video_file_lock),
             web::Data::new(qb),
             db_connection,
         )
         .await
         .unwrap();
+
+        println!("{:?}", res);
     }
 }

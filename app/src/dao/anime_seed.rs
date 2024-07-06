@@ -213,10 +213,10 @@ pub async fn get_anime_seed_by_mikan_id(
 #[allow(dead_code)]
 pub async fn get_anime_seed_by_seed_url(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    item: String, // seed_url
+    item: &String, // seed_url
 ) -> Result<AnimeSeed, diesel::result::Error> {
     match anime_seed
-        .filter(seed_url.like(&item))
+        .filter(seed_url.like(format!("%{}%", item)))
         .first::<AnimeSeed>(db_connection)
     {
         Ok(result) => Ok(result),
