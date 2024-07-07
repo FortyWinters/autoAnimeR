@@ -33,6 +33,7 @@ pub async fn start_schedule_task_handler(
         do_anime_task::run_task(&status, &qb_clone, &mut db_connection).await;
     });
     drop(run_handle);
+    log::info!("start schedule task");
     Ok(HttpResponse::Ok().body("ok"))
 }
 
@@ -47,11 +48,13 @@ pub async fn change_task_interval_handler(
     let qb_clone = Arc::clone(&qb);
     let mut db_connection = pool.get().unwrap();
 
+    let interval = item.interval.clone();
     let run_handle = actix::spawn(async move {
-        do_anime_task::change_task_interval(item.interval, &status, &qb_clone, &mut db_connection)
+        do_anime_task::change_task_interval(interval, &status, &qb_clone, &mut db_connection)
             .await;
     });
     drop(run_handle);
+    log::info!("change schedule task with new interval: {}", item.interval);
     Ok(HttpResponse::Ok().body("ok"))
 }
 

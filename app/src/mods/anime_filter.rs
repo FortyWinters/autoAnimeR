@@ -105,7 +105,7 @@ pub async fn filter_v3(
                 || local_avoid_sub_set.contains(&-anime_seed.subgroup_id)
                 || anime_seed.episode < local_episode_filter
             {
-                log::info!("skip torrent: {}", anime_seed.seed_name);
+                log::debug!("skip torrent: {}", anime_seed.seed_name);
                 continue;
             }
 

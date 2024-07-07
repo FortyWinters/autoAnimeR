@@ -48,7 +48,7 @@ pub async fn create_anime_task_bulk(
     let anime_list_vec = dao::anime_list::get_by_subscribestatus(db_connection, 1)
         .await
         .unwrap();
-    log::info!("anime list: {:?}", anime_list_vec);
+    log::debug!("anime list: {:?}", anime_list_vec);
 
     // 得到订阅的全部种子
     let mut anime_seed_map: HashMap<i32, Vec<AnimeSeed>> = HashMap::new();
@@ -327,7 +327,7 @@ pub async fn filter_and_download(
         .await
         .unwrap();
 
-    log::info!("new anime seed: {:?}", new_anime_seed_vec);
+    log::debug!("new anime seed: {:?}", new_anime_seed_vec);
     // println!("new_anime_seed_vec: {:?}", new_anime_seed_vec);
 
     // 下载种子
@@ -469,13 +469,13 @@ pub async fn run(
         .unwrap()
         .success_vec;
 
-    log::info!("Create anime task start");
+    log::debug!("Create anime task start");
     let qb = qb_task_executor.read().await;
     create_anime_task_bulk(&mikan, &qb, db_connection)
         .await
         .unwrap();
     drop(qb);
-    log::info!("Create anime task done");
+    log::debug!("Create anime task done");
 }
 
 #[allow(dead_code)]
@@ -489,14 +489,14 @@ pub async fn run_task(
         let mut writer = status.write().await;
         *writer = true;
     }
-    log::info!("Start scheduled task");
+    log::debug!("Start scheduled task");
     loop {
         let reader = status.read().await;
         let val = *reader;
         drop(reader);
 
         if val {
-            log::info!("Running scheduled task with interval 2 min");
+            log::debug!("Running scheduled task with interval 2 min");
             run(qb_task_executor, db_connection).await;
             time::sleep(Duration::from_secs(interval)).await;
         } else {
@@ -507,10 +507,10 @@ pub async fn run_task(
 
 #[allow(dead_code)]
 pub async fn exit_task(status: &Arc<TokioRwLock<bool>>) {
-    log::info!("Stop scheduled task");
+    log::debug!("Stop scheduled task");
     let mut writer = status.write().await;
     *writer = false;
-    log::info!("Task status has been changed to false");
+    log::debug!("Task status has been changed to false");
     // println!("{}", writer);
 }
 
@@ -525,14 +525,14 @@ pub async fn change_task_interval(
         let mut writer = status.write().await;
         *writer = true;
     }
-    log::info!("Start scheduled task");
+    log::debug!("Start scheduled task");
     loop {
         let reader = status.read().await;
         let val = *reader;
         drop(reader);
 
         if val {
-            log::info!("Running scheduled task with interval: {} min", interval);
+            log::debug!("Running scheduled task with interval: {} min", interval);
             run(qb_task_executor, db_connection).await;
             time::sleep(Duration::from_secs(interval_sec)).await;
         } else {

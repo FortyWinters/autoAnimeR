@@ -522,7 +522,7 @@ impl TorrentInfo {
         let item_size = item["size"]
             .as_i64()
             .ok_or("Field not found")
-            .map_err(|e| handle_error(e, "No item named 'size' "))?;
+            .map_err(|e| handle_error(e, "No item named 'size'"))?;
 
         const GB: i64 = 1024 * 1024 * 1024;
         const MB: i64 = 1024 * 1024;
