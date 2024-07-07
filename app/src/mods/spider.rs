@@ -390,7 +390,7 @@ fn regex_seed_episode(seed_name: &str) -> Result<i32, Box<dyn Error>> {
                 .unwrap());
         }
     }
-    return Ok(str_list2[0][1..str_list2[0].len() - 1]
+    return Ok(str_list2[str_list2.len() - 1][1..str_list2[0].len() - 1]
         .to_string()
         .parse::<i32>()
         .unwrap());
