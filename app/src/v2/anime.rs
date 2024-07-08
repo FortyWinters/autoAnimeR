@@ -290,6 +290,8 @@ async fn update_anime_broadcast(
             bangumi_rank: "".to_string(),
             bangumi_summary: "".to_string(),
             website: "".to_string(),
+            anime_status: -1,
+            total_episodes: -1,
         });
         anime_broadcast_json_vec.push(anime_broadcast::AnimeBroadcastJson {
             mikan_id: anime.mikan_id,
@@ -457,9 +459,14 @@ pub async fn seed_update(
     let bangumi = spider::Bangumi::new()?;
 
     let mikan_id = item.mikan_id;
-    let bangumi_id = mikan.get_bangumi_id(mikan_id).await?;
+    let (bangumi_id, total_episodes) = mikan.get_bangumi_id_and_total_episodes(mikan_id).await?;
 
-    let bangumi_info = bangumi.get_bangumi_info(bangumi_id).await?;
+    let mut bangumi_info = bangumi.get_bangumi_info(bangumi_id).await?;
+
+    if bangumi_info.total_episodes == -1 {
+        bangumi_info.total_episodes = total_episodes;
+    }
+
     dao::anime_list::update_bangumiinfo_by_mikanid(
         db_connection,
         mikan_id,
@@ -468,6 +475,7 @@ pub async fn seed_update(
             bangumi_rank: bangumi_info.bangumi_rank,
             bangumi_summary: bangumi_info.bangumi_summary,
             website: bangumi_info.website,
+            total_episodes: bangumi_info.total_episodes,
         },
     )
     .await
@@ -512,6 +520,27 @@ pub async fn seed_update(
                 Err(_) => continue,
             }
         }
+    }
+
+    let max_episode = seed_vec.iter().map(|seed| seed.episode).max().unwrap_or(-1);
+    if max_episode == bangumi_info.total_episodes {
+        dao::anime_list::update_animestatus_by_mikanid(db_connection, mikan_id, 1)
+            .await
+            .map_err(|e| {
+                handle_error(
+                    e,
+                    "seed_update, dao::anime_list::update_animestatus_by_mikanid failed",
+                )
+            })?;
+    } else {
+        dao::anime_list::update_animestatus_by_mikanid(db_connection, mikan_id, 0)
+            .await
+            .map_err(|e| {
+                handle_error(
+                    e,
+                    "seed_update, dao::anime_list::update_animestatus_by_mikanid failed",
+                )
+            })?;
     }
 
     dao::anime_seed::add_bulk(db_connection, seed_vec)

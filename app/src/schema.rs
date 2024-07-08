@@ -32,6 +32,8 @@ diesel::table! {
         bangumi_rank -> Text,
         bangumi_summary -> Text,
         website -> Text,
+        anime_status -> Integer,
+        total_episodes -> Integer,
     }
 }
 

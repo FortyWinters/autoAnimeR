@@ -268,6 +268,8 @@ pub async fn create_anime_task_from_exist_files(
                         bangumi_rank: "".to_string(),
                         bangumi_summary: "".to_string(),
                         website: "".to_string(),
+                        anime_status: -1,
+                        total_episodes: -1,
                     },
                 )
                 .await

@@ -29,6 +29,8 @@ pub async fn add(
                 bangumi_rank: &item.bangumi_rank,
                 bangumi_summary: &item.bangumi_summary,
                 website: &item.website,
+                anime_status: &item.anime_status,
+                total_episodes: &item.total_episodes,
             };
             insert_into(anime_list)
                 .values(&new_anime_list)
@@ -62,6 +64,8 @@ pub async fn add_vec(
                 bangumi_rank: &item.bangumi_rank,
                 bangumi_summary: &item.bangumi_summary,
                 website: &item.website,
+                anime_status: &item.anime_status,
+                total_episodes: &item.total_episodes,
             };
             insert_into(anime_list)
                 .values(&new_anime_list)
@@ -106,6 +110,18 @@ pub async fn update_subscribestatus_by_mikanid(
     Ok(())
 }
 
+// update anime_status by mikan_id
+pub async fn update_animestatus_by_mikanid(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_mikanid: i32,
+    update_animestatus: i32,
+) -> Result<(), diesel::result::Error> {
+    diesel::update(anime_list.filter(mikan_id.eq(query_mikanid)))
+        .set(anime_status.eq(update_animestatus))
+        .execute(db_connection)?;
+    Ok(())
+}
+
 // update bangumi info by mikan_id
 pub async fn update_bangumiinfo_by_mikanid(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
@@ -118,6 +134,7 @@ pub async fn update_bangumiinfo_by_mikanid(
             bangumi_rank.eq(item.bangumi_rank),
             bangumi_summary.eq(item.bangumi_summary),
             website.eq(item.website),
+            total_episodes.eq(item.total_episodes),
         ))
         .execute(db_connection)?;
     Ok(())
@@ -191,6 +208,8 @@ mod test {
             bangumi_rank: "4.3".to_string(),
             bangumi_summary: "asdasd".to_string(),
             website: "www.baidu.com".to_string(),
+            anime_status: -1,
+            total_episodes: -1,
         };
 
         let r = add(db_connection, test_anime_seed_json).await.unwrap();

@@ -176,9 +176,16 @@ impl Mikan {
         return Ok(subgroup_list);
     }
 
-    pub async fn get_bangumi_id(&self, mikan_id: i32) -> Result<i32, Box<dyn Error>> {
+    pub async fn get_bangumi_id_and_total_episodes(
+        &self,
+        mikan_id: i32,
+    ) -> Result<(i32, i32), Box<dyn Error>> {
         let url = format!("{}/Home/Bangumi/{}", self.url, mikan_id);
         let document = self.request_html(&url).await?;
+
+        let mut bangumi_id = -1;
+        let mut total_episodes = -1;
+
         let selector = Class("bangumi-info").descendant(Name("a").and(Class("w-other-c")));
         let mut anime_urls = Vec::new();
         for element in document.find(selector) {
@@ -186,12 +193,42 @@ impl Mikan {
                 anime_urls.push(href.to_string());
             }
         }
-        let bangumi_id_str = anime_urls[1]
-            .split('/')
-            .last()
-            .ok_or("Invalid URL format")?;
-        let bangumi_id = bangumi_id_str.parse::<i32>()?;
-        Ok(bangumi_id)
+        if let Some(bangumi_url) = anime_urls.get(1) {
+            if let Some(id_str) = bangumi_url.split('/').last() {
+                if let Ok(id) = id_str.parse::<i32>() {
+                    bangumi_id = id;
+                }
+            }
+        }
+
+        if let Some(content) = document
+            .find(Class("pull-left").and(Class("leftbar-container")))
+            .next()
+        {
+            if let Some(total_episodes_text) = content
+                .find(Class("bangumi-info"))
+                .filter_map(|n| {
+                    let text = n.text();
+                    if text.contains("总集数") {
+                        Some(text)
+                    } else {
+                        None
+                    }
+                })
+                .next()
+            {
+                if let Some(total_episodes_str) = total_episodes_text.split('：').nth(1) {
+                    let total_episodes_str = total_episodes_str.trim();
+                    if total_episodes_str == "*" {
+                        total_episodes = -1;
+                    } else if let Ok(te) = total_episodes_str.parse::<i32>() {
+                        total_episodes = te;
+                    }
+                }
+            }
+        }
+
+        Ok((bangumi_id, total_episodes))
     }
 
     pub async fn get_seed(
@@ -408,6 +445,7 @@ pub struct BangumiInfo {
     pub bangumi_rank: String,
     pub bangumi_summary: String,
     pub website: String,
+    pub total_episodes: i32,
 }
 
 impl Bangumi {
@@ -459,11 +497,40 @@ impl Bangumi {
             })
             .unwrap_or_default();
 
+        let total_episodes_str = document
+            .find(Name("li"))
+            .filter(|node| {
+                node.find(Class("tip"))
+                    .next()
+                    .map_or(false, |span| span.text().contains("话数: "))
+            })
+            .next()
+            .and_then(|li| {
+                li.text()
+                    .split("话数: ")
+                    .nth(1)
+                    .map(|s| s.trim().to_string())
+            })
+            .unwrap_or_default();
+
+        let total_episodes = convert_total_episodes(&total_episodes_str).unwrap_or(-1);
+
         Ok(BangumiInfo {
             bangumi_id,
             bangumi_rank,
             bangumi_summary,
             website: bangumi_website,
+            total_episodes,
         })
+    }
+}
+
+fn convert_total_episodes(total_episodes_str: &str) -> Result<i32, Box<dyn Error>> {
+    match total_episodes_str {
+        "" | "*" => Ok(-1),
+        _ => {
+            let total_episodes = total_episodes_str.parse::<i32>()?;
+            Ok(total_episodes)
+        }
     }
 }

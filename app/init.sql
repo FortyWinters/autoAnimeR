@@ -37,7 +37,9 @@ CREATE TABLE "anime_list" (
   "bangumi_id" INTEGER NOT NULL DEFAULT NULL,
   "bangumi_rank" TEXT NOT NULL,
   "bangumi_summary" TEXT NOT NULL,
-  "website" TEXT NOT NULL
+  "website" TEXT NOT NULL,
+  "anime_status" INTEGER NOT NULL DEFAULT NULL,
+  "total_episodes" INTEGER NOT NULL DEFAULT NULL
 );
 
 -- ----------------------------

@@ -14,6 +14,8 @@ pub struct AnimeList {
     pub bangumi_rank: String,
     pub bangumi_summary: String,
     pub website: String,
+    pub anime_status: i32,   // 默认为-1, 0表示更新中, 1表示完结
+    pub total_episodes: i32, // 默认为-1
 }
 
 impl Ord for AnimeList {
@@ -45,6 +47,8 @@ pub struct PostAnimeList<'a> {
     pub bangumi_rank: &'a str,
     pub bangumi_summary: &'a str,
     pub website: &'a str,
+    pub anime_status: &'a i32,
+    pub total_episodes: &'a i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -59,6 +63,8 @@ pub struct AnimeListJson {
     pub bangumi_rank: String,
     pub bangumi_summary: String,
     pub website: String,
+    pub anime_status: i32,
+    pub total_episodes: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -67,4 +73,5 @@ pub struct BangumiInfoJson {
     pub bangumi_rank: String,
     pub bangumi_summary: String,
     pub website: String,
+    pub total_episodes: i32,
 }
