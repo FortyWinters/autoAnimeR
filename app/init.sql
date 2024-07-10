@@ -89,9 +89,9 @@ CREATE TABLE "anime_task" (
 DROP TABLE IF EXISTS "anime_progress";
 CREATE TABLE `anime_progress` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `progress_id` TEXT,
-  `mikan_id` INTEGER,
-  `episode` INTEGER,
-  `torrent_name` TEXT,
-  `progress_status` INTEGER
+  `progress_id` TEXT NOT NULL,
+  `mikan_id` INTEGER NOT NULL,
+  `episode` INTEGER NOT NULL,
+  `torrent_name` TEXT NOT NULL,
+  `progress_status` INTEGER NOT NULL
 );
