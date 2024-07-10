@@ -48,5 +48,7 @@ pub fn video_routes_v2(cfg: &mut web::ServiceConfig) {
         web::scope("/v2/video")
             .service(get_video_detail_handler)
             .service(extract_subtitle_handle)
+            .service(get_anime_progress_handler)
+            .service(set_anime_progress_handler)
     );
 }

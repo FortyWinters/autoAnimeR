@@ -70,6 +70,17 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    anime_progress (id) {
+        id -> Nullable<Integer>,
+        progress_id -> Text,
+        mikan_id -> Integer,
+        episode -> Integer,
+        torrent_name -> Text,
+        progress_status -> Integer
+    }
+}
+
 diesel::allow_tables_to_appear_in_same_query!(
     anime_broadcast,
     anime_filter,

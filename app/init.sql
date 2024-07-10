@@ -82,3 +82,16 @@ CREATE TABLE "anime_task" (
   "rename_status" INTEGER NOT NULL,
   "filename" TEXT NOT NULL
 );
+
+-- ----------------------------
+-- Table structure for anime_progress
+-- ----------------------------
+DROP TABLE IF EXISTS "anime_progress";
+CREATE TABLE `anime_progress` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `progress_id` TEXT,
+  `mikan_id` INTEGER,
+  `episode` INTEGER,
+  `torrent_name` TEXT,
+  `progress_status` INTEGER
+);

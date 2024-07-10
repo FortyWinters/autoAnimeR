@@ -1,4 +1,5 @@
 use crate::api::do_anime_task::{self, VideoConfig};
+use crate::models::anime_progess::AnimeProgressJson;
 use crate::mods::qb_api::QbitTaskExecutor;
 use crate::mods::video_proccessor;
 use crate::{dao, Pool};
@@ -212,6 +213,170 @@ pub async fn extract_subtitle(
             .as_bytes(),
     )
     .map_err(|e| handle_error(e, "Failed to update video config file."))?;
+
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReqAnimeProgress {
+    pub progress_id: String,
+    pub mikan_id: Option<i32>,
+    pub episode: Option<i32>,
+    pub torrent_name: Option<String>,
+    pub progress_status: Option<i32>,
+}
+
+impl ReqAnimeProgress {
+    pub fn to_anime_progress_json(&self) -> AnimeProgressJson {
+        AnimeProgressJson {
+            progress_id: self.progress_id.clone(),
+            mikan_id: self.mikan_id.unwrap_or(-1),
+            episode: self.episode.unwrap_or(-1),
+            torrent_name: self.torrent_name.clone().unwrap_or("".to_string()),
+            progress_status: self.progress_status.unwrap_or(0),
+        }
+    }
+}
+
+#[post("/get_anime_progress")]
+pub async fn get_anime_progress_handler(
+    item: web::Json<ReqAnimeProgress>,
+    pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let res = match (&item.mikan_id, &item.episode, &item.torrent_name) {
+        (Some(mikan_id), Some(episode), _) => {
+            get_anime_progress_by_mikanid_and_episode(&item.progress_id, mikan_id, episode, pool)
+                .await
+        }
+        (_, _, Some(torrent_name)) => {
+            get_anime_progress_by_torrent(&item.progress_id, torrent_name, pool).await
+        }
+        _ => Ok(0),
+    };
+
+    Ok(HttpResponse::Ok().json(res.unwrap_or(0)))
+}
+
+async fn get_anime_progress_by_mikanid_and_episode(
+    progress_id: &String,
+    mikan_id: &i32,
+    episode: &i32,
+    pool: web::Data<Pool>,
+) -> Result<i32, Error> {
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
+    Ok(dao::anime_progress::get_by_mikan_id_and_episode(
+        &progress_id,
+        &mikan_id,
+        &episode,
+        db_connection,
+    )
+    .await
+    .map_err(|e| {
+        handle_error(
+            e,
+            format!(
+                "Failed to get anime progress {} by [mikan_id: {}, episode: {}] ",
+                progress_id, mikan_id, episode
+            )
+            .as_str(),
+        )
+    })?
+    .progress_status)
+}
+
+async fn get_anime_progress_by_torrent(
+    progress_id: &String,
+    torrent_name: &String,
+    pool: web::Data<Pool>,
+) -> Result<i32, Error> {
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
+    Ok(
+        dao::anime_progress::get_by_torrent_name(progress_id, torrent_name, db_connection)
+            .await
+            .map_err(|e| {
+                handle_error(
+                    e,
+                    format!(
+                        "Failed to get anime progress {} by [torrent_name: {}] ",
+                        progress_id, torrent_name
+                    )
+                    .as_str(),
+                )
+            })?
+            .progress_status,
+    )
+}
+
+#[post("/set_anime_progress")]
+pub async fn set_anime_progress_handler(
+    item: web::Json<ReqAnimeProgress>,
+    pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let res = match (&item.mikan_id, &item.episode, &item.torrent_name) {
+        (Some(_), Some(_), _) => set_anime_progress_by_mikanid_and_episode(&item, pool).await,
+        (_, _, Some(_)) => set_anime_progress_by_torrent(&item, pool).await,
+        _ => Ok(()),
+    };
+
+    match res {
+        Ok(_) => Ok(HttpResponse::Ok().json("ok")),
+        Err(_) => Ok(HttpResponse::BadRequest().body("error")),
+    }
+}
+
+async fn set_anime_progress_by_mikanid_and_episode(
+    item: &ReqAnimeProgress,
+    pool: web::Data<Pool>,
+) -> Result<(), Error> {
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
+    let quary_item = item.to_anime_progress_json();
+
+    dao::anime_progress::add_with_mikan_id_and_episode(&quary_item, db_connection)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                format!(
+                    "Failed to set anime progress {} by [mikan_id: {}, episode: {}] ",
+                    quary_item.progress_id, quary_item.mikan_id, quary_item.episode
+                )
+                .as_str(),
+            )
+        })?;
+    Ok(())
+}
+
+async fn set_anime_progress_by_torrent(
+    item: &ReqAnimeProgress,
+    pool: web::Data<Pool>,
+) -> Result<(), Error> {
+    let db_connection = &mut pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
+    let quary_item = item.to_anime_progress_json();
+
+    dao::anime_progress::add_with_torrent_name(&quary_item, db_connection)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                format!(
+                    "Failed to set anime progress {} by [torrent_name: {}]",
+                    quary_item.progress_id, quary_item.torrent_name
+                )
+                .as_str(),
+            )
+        })?;
 
     Ok(())
 }
