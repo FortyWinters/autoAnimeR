@@ -173,11 +173,26 @@ pub async fn get_mikanid_by_anime_name(
 #[allow(dead_code)]
 pub async fn search_by_anime_name(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    query_keyword: &String
+    query_keyword: &String,
 ) -> Result<Vec<AnimeList>, diesel::result::Error> {
     let pattern = format!("%{}%", query_keyword);
-    let results = anime_list.filter(anime_name.like(pattern)).load::<AnimeList>(db_connection)?;
+    let results = anime_list
+        .filter(anime_name.like(pattern))
+        .load::<AnimeList>(db_connection)?;
     Ok(results)
+}
+
+#[allow(dead_code)]
+pub async fn get_by_subscribe_and_anime_status(
+    query_subscribe_status: &i32,
+    query_anime_status: &i32,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<Vec<AnimeList>, diesel::result::Error> {
+    let result: Vec<AnimeList> = anime_list
+        .filter(subscribe_status.eq(query_subscribe_status))
+        .filter(anime_status.eq(query_anime_status))
+        .load::<AnimeList>(db_connection)?;
+    Ok(result)
 }
 
 #[cfg(test)]

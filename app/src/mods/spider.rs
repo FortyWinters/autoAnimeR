@@ -361,7 +361,7 @@ impl Mikan {
                     .replace("星期四", "4")
                     .replace("星期五", "5")
                     .replace("星期六", "6")
-                    .replace("星期日", "7");
+                    .replace("星期日", "0");
                 let re = Regex::new(r"\d+").unwrap();
                 if let Some(captures) = re.captures(&text) {
                     if let Some(number) = captures.get(0) {

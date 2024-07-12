@@ -1,6 +1,6 @@
 use crate::models::anime_seed::*;
 use crate::schema::anime_seed::dsl::*;
-use diesel::dsl::{insert_into, update};
+use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::{delete, RunQueryDsl};
@@ -114,15 +114,10 @@ pub async fn update_anime_seed_status(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     item: &String, // seed_url
 ) -> Result<(), diesel::result::Error> {
-    if let Ok(_) = anime_seed
-        .filter(seed_url.eq(item))
-        .first::<AnimeSeed>(db_connection)
-    {
-        update(anime_seed.filter(seed_url.eq(item)))
-            .set(seed_status.eq(1))
-            .execute(db_connection)
-            .expect("save failed");
-    }
+    diesel::update(anime_seed.filter(seed_url.like(format!("%{}%", item))))
+        .set(seed_status.eq(1))
+        .execute(db_connection)
+        .expect("save failed");
     Ok(())
 }
 
@@ -367,9 +362,12 @@ mod test {
         let pool = web::Data::new(database_pool);
         let db_connection = &mut pool.get().unwrap();
 
-        let _r = update_anime_seed_status(db_connection, &"test_seed_url_1".to_string())
-            .await
-            .unwrap();
+        let _r = update_anime_seed_status(
+            db_connection,
+            &"14b01d6e56f0168ef3f520dbe08d3dd025e3597a".to_string(),
+        )
+        .await
+        .unwrap();
     }
 
     #[tokio::test]

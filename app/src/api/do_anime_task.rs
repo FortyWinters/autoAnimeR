@@ -1,5 +1,5 @@
 use crate::api::spider_task::do_spider_task;
-use crate::models::anime_list::AnimeListJson;
+use crate::models::anime_list::{AnimeList, AnimeListJson};
 use crate::models::anime_seed::AnimeSeed;
 use crate::models::anime_task::{AnimeTask, AnimeTaskJson};
 use crate::mods::config::Config;
@@ -8,6 +8,7 @@ use crate::v2::anime::AnimeRequestJson;
 use crate::{dao, v2};
 
 use anyhow::Error;
+use chrono::prelude::*;
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::SqliteConnection;
 use futures::future::join_all;
@@ -233,7 +234,7 @@ pub async fn create_anime_task_from_exist_files(
                 let anime_task = AnimeTaskJson {
                     mikan_id,
                     episode: cur_video_config.episode,
-                    torrent_name: format!("{}.torrent", cur_video_config.torrent_hash),
+                    torrent_name: format!("{}", cur_video_config.torrent_name),
                     qb_task_status: 1,
                     rename_status: 1,
                     filename: video,
@@ -285,7 +286,7 @@ pub async fn create_anime_task_from_exist_files(
                 let anime_task = AnimeTaskJson {
                     mikan_id,
                     episode: cur_video_config.episode,
-                    torrent_name: format!("{}.torrent", cur_video_config.torrent_hash),
+                    torrent_name: format!("{}", cur_video_config.torrent_name),
                     qb_task_status: 1,
                     rename_status: 1,
                     filename: video,
@@ -300,13 +301,25 @@ pub async fn create_anime_task_from_exist_files(
             }
 
             // update anime seed
-            if let Ok(_) =
-                v2::anime::seed_update(db_connection, AnimeRequestJson { mikan_id }).await
+            if v2::anime::seed_update(db_connection, AnimeRequestJson { mikan_id })
+                .await
+                .is_ok()
             {
-                log::info!("Success update anime seed for [{}]", mikan_id);
+                match dao::anime_seed::update_anime_seed_status(
+                    db_connection,
+                    &cur_video_config.torrent_name,
+                )
+                .await
+                {
+                    Ok(_) => log::info!("Successfully updated anime seed for [{}]", mikan_id),
+                    Err(e) => log::error!(
+                        "Failed to update anime seed status for [{}]: {:?}",
+                        mikan_id,
+                        e
+                    ),
+                }
             } else {
-                log::info!("Failed to update anime seed for [{}]", mikan_id);
-                continue;
+                log::error!("Failed to update anime seed for [{}]", mikan_id);
             }
         }
     }
@@ -455,6 +468,41 @@ pub async fn download_seed_handler(
 }
 
 #[allow(dead_code)]
+pub async fn get_under_update_task_list(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<(), Error> {
+    let new_sub_annime_vec =
+        dao::anime_list::get_by_subscribe_and_anime_status(&1, &-1, db_connection)
+            .await
+            .unwrap();
+
+    let mut subscribed_anime_vec =
+        dao::anime_list::get_by_subscribe_and_anime_status(&1, &0, db_connection)
+            .await
+            .unwrap();
+
+    subscribed_anime_vec.extend(new_sub_annime_vec);
+
+    let weekday = (Local::now().weekday().num_days_from_monday() + 1) as i32;
+
+    println!("Today is: {}", weekday);
+
+    let under_update_task_list: Vec<AnimeList> = subscribed_anime_vec
+        .into_iter()
+        .filter(|anime_list| {
+            let update_day = anime_list.update_day;
+            update_day == weekday || update_day - 1 == weekday || update_day + 1 == weekday
+        })
+        .collect();
+
+    for task in under_update_task_list {
+        println!("{:?}", task.anime_name);
+    }
+
+    Ok(())
+}
+
+#[allow(dead_code)]
 pub async fn run(
     qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
@@ -553,7 +601,7 @@ pub async fn get_task_status(status: &Arc<TokioRwLock<bool>>) -> Result<bool, Er
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VideoConfig {
-    pub torrent_hash: String,
+    pub torrent_name: String,
     pub mikan_id: i32,
     pub episode: i32,
     pub subtitle_nb: i32,
@@ -663,7 +711,7 @@ pub async fn auto_rename_and_extract_handler(
 
             // write VideoConfig
             let cur_config = VideoConfig {
-                torrent_hash: task.torrent_name.clone(),
+                torrent_name: task.torrent_name.clone(),
                 mikan_id: task.mikan_id,
                 episode: task.episode,
                 subtitle_nb: subtitle_vec.len() as i32,
@@ -809,14 +857,18 @@ mod test {
             .build(ConnectionManager::<SqliteConnection>::new(database_url))
             .expect("Failed to create pool.");
 
-        let qb = Arc::new(TokioRwLock::new(
+        let _qb = Arc::new(TokioRwLock::new(
             QbitTaskExecutor::new_with_config(&config)
                 .await
                 .expect("Failed to create qb client"),
         ));
 
-        let video_file_lock = Arc::new(TokioRwLock::new(false));
-        let _ =
-            auto_update_rename_extract(&video_file_lock, &mut database_pool.get().unwrap(), &qb).await;
+        // let video_file_lock = Arc::new(TokioRwLock::new(false));
+        // let _ =
+        //     auto_update_rename_extract(&video_file_lock, &mut database_pool.get().unwrap(), &qb)
+        //         .await;
+        let _ = get_under_update_task_list(&mut database_pool.get().unwrap())
+            .await
+            .unwrap();
     }
 }

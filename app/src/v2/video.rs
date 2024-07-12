@@ -190,7 +190,7 @@ pub async fn extract_subtitle(
 
     // write VideoConfig
     let cur_config = VideoConfig {
-        torrent_hash: anime_task.torrent_name.clone(),
+        torrent_name: anime_task.torrent_name.clone(),
         mikan_id: anime_task.mikan_id,
         episode: anime_task.episode,
         subtitle_nb: subtitle_vec.len() as i32,
