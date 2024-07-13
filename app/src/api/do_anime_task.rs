@@ -168,39 +168,84 @@ pub async fn create_anime_task_from_exist_files(
 ) -> Result<(), Error> {
     let video_file_lock = video_file_lock.read().await;
 
-    let qb = qb.read().await;
-    let download_path = qb.qb_api_get_download_path().await.unwrap();
-    drop(qb);
+    let download_path = {
+        let qb = qb.read().await;
+        qb.qb_api_get_download_path().await.unwrap()
+    };
 
     let (_, video_config) = get_video_config(&download_path)
         .await
         .map_err(|e| handle_error(e, "Failed to get video config"))?;
-    drop(video_file_lock);
+    drop(video_file_lock); // Explicitly drop the lock here
 
-    let files = std::fs::read_dir(download_path).unwrap();
+    let files = std::fs::read_dir(&download_path)?;
 
     for file in files {
         let file = file?;
         let filename = file.file_name().to_string_lossy().to_string();
-        // println!("{}", filename);
-        if filename == "seed" || filename == ".DS_Store" || filename == ".videoConfig.json" {
+
+        if ["seed", ".DS_Store", ".videoConfig.json"].contains(&filename.as_str()) {
             continue;
         }
 
-        let mikan_id: i32;
-        let mikan = Mikan::new().unwrap();
-
-        let re = Regex::new(r"\((\d+)\)").unwrap();
-        if let Some(captures) = re.captures(filename.as_str()) {
-            if let Some(number_str) = captures.get(1) {
-                mikan_id = number_str.as_str().parse::<i32>().unwrap();
-                // println!("{}", mikan_id);
-            } else {
+        let mikan_id = match Regex::new(r"\((\d+)\)")?.captures(&filename) {
+            Some(captures) => captures.get(1).unwrap().as_str().parse::<i32>().unwrap(),
+            None => {
+                log::info!("Failed to get mikan id, file name: [{}]", filename);
                 continue;
             }
-        } else {
-            log::info!("Failed to get mikan id, file name: [{}]", filename);
-            continue;
+        };
+
+        // Update anime list
+        let mikan = Mikan::new().unwrap();
+        let anime = mikan.get_anime_by_mikan_id(mikan_id).await.unwrap();
+        let img_url = anime.img_url.split("?").next().unwrap().to_string();
+
+        dao::anime_list::add(
+            db_connection,
+            AnimeListJson {
+                anime_name: anime.anime_name.clone(),
+                anime_type: anime.anime_type,
+                mikan_id: anime.mikan_id,
+                update_day: anime.update_day,
+                img_url: img_url.clone(),
+                subscribe_status: anime.subscribe_status,
+                bangumi_id: -1,
+                bangumi_rank: "".to_string(),
+                bangumi_summary: "".to_string(),
+                website: "".to_string(),
+                anime_status: -1,
+                total_episodes: -1,
+            },
+        )
+        .await?;
+
+        // Download image
+        let save_path = {
+            let config = config.read().await;
+            config.img_path.clone()
+        };
+        mikan.download_img(&img_url, &save_path).await.unwrap();
+
+        // Update anime seed
+        if v2::anime::seed_update(db_connection, AnimeRequestJson { mikan_id })
+            .await
+            .is_err()
+        {
+            log::warn!(
+                "Failed to update seed for anime: {}, retrying once.",
+                anime.anime_name
+            );
+            if v2::anime::seed_update(db_connection, AnimeRequestJson { mikan_id })
+                .await
+                .is_err()
+            {
+                log::warn!(
+                    "Failed to update seed for anime: {}, please retry later.",
+                    anime.anime_name
+                );
+                continue;
+            }
         }
 
         for video in file.path().read_dir()? {
@@ -211,118 +256,60 @@ pub async fn create_anime_task_from_exist_files(
                 continue;
             }
 
-            let extension = video.split(".").last().unwrap();
-            if extension == "ass" || extension == "vtt" {
+            let extension = video.split('.').last().unwrap();
+            if ["ass", "vtt"].contains(&extension) {
                 continue;
             }
 
-            let cur_video_config: &VideoConfig;
-            if let Ok(cfg) = video_config.get(&video).ok_or("error") {
-                cur_video_config = cfg;
-            } else {
-                log::warn!(
-                    "Failed to get anime info from video config file, anime name: [{}]",
-                    video
-                );
-                continue;
-            }
-
-            if let Ok(_) =
-                dao::anime_list::get_mikanid_by_anime_name(&parts[0].to_string(), db_connection)
-                    .await
-            {
-                let anime_task = AnimeTaskJson {
-                    mikan_id,
-                    episode: cur_video_config.episode,
-                    torrent_name: format!("{}", cur_video_config.torrent_name),
-                    qb_task_status: 1,
-                    rename_status: 1,
-                    filename: video,
-                };
-                dao::anime_task::add(db_connection, &anime_task)
-                    .await
-                    .unwrap();
-                log::info!(
-                    "add new anime task to db, anime_task detail: {:?}",
-                    anime_task
-                );
-            } else {
-                log::info!(
-                    "Failed to find anime from anime list, try to update anime list, anime_name: {}, episode: {}",
-                    parts[0],
-                    parts[1]
-                );
-
-                // update anime list
-                let anime = mikan.get_anime_by_mikan_id(mikan_id).await.unwrap();
-                let img_url = anime.img_url.clone();
-                dao::anime_list::add(
-                    db_connection,
-                    AnimeListJson {
-                        anime_name: anime.anime_name,
-                        anime_type: anime.anime_type,
-                        mikan_id: anime.mikan_id,
-                        update_day: anime.update_day,
-                        img_url: anime.img_url,
-                        subscribe_status: anime.subscribe_status,
-                        bangumi_id: -1,
-                        bangumi_rank: "".to_string(),
-                        bangumi_summary: "".to_string(),
-                        website: "".to_string(),
-                        anime_status: -1,
-                        total_episodes: -1,
-                    },
-                )
-                .await
-                .unwrap();
-
-                // download img
-                let config = config.read().await;
-                let save_path = config.img_path.clone();
-                drop(config);
-                mikan.download_img(&img_url, &save_path).await.unwrap();
-
-                // update anime task
-                let anime_task = AnimeTaskJson {
-                    mikan_id,
-                    episode: cur_video_config.episode,
-                    torrent_name: format!("{}", cur_video_config.torrent_name),
-                    qb_task_status: 1,
-                    rename_status: 1,
-                    filename: video,
-                };
-                dao::anime_task::add(db_connection, &anime_task)
-                    .await
-                    .unwrap();
-                log::info!(
-                    "add new anime task to db, anime_task detail: {:?}",
-                    anime_task
-                );
-            }
-
-            // update anime seed
-            if v2::anime::seed_update(db_connection, AnimeRequestJson { mikan_id })
-                .await
-                .is_ok()
-            {
-                match dao::anime_seed::update_anime_seed_status(
-                    db_connection,
-                    &cur_video_config.torrent_name,
-                )
-                .await
-                {
-                    Ok(_) => log::info!("Successfully updated anime seed for [{}]", mikan_id),
-                    Err(e) => log::error!(
-                        "Failed to update anime seed status for [{}]: {:?}",
-                        mikan_id,
-                        e
-                    ),
+            let cur_video_config = match video_config.get(&video).ok_or("error") {
+                Ok(cfg) => cfg,
+                Err(_) => {
+                    log::warn!(
+                        "Failed to get anime info from video config file, anime name: [{}]",
+                        video
+                    );
+                    continue;
                 }
+            };
+
+            let anime_task = AnimeTaskJson {
+                mikan_id,
+                episode: cur_video_config.episode,
+                torrent_name: cur_video_config.torrent_name.clone(),
+                qb_task_status: 1,
+                rename_status: 1,
+                filename: video.clone(),
+            };
+
+            if let Err(e) = dao::anime_task::add(db_connection, &anime_task).await {
+                log::error!(
+                    "Failed to add new anime task to db: {:?}, error: {:?}",
+                    anime_task,
+                    e
+                );
             } else {
-                log::error!("Failed to update anime seed for [{}]", mikan_id);
+                log::info!(
+                    "Added new anime task to db, anime_task detail: {:?}",
+                    anime_task
+                );
+            }
+
+            match dao::anime_seed::update_anime_seed_status(
+                db_connection,
+                &cur_video_config.torrent_name,
+            )
+            .await
+            {
+                Ok(_) => log::info!("Successfully updated anime seed for [{}]", mikan_id),
+                Err(e) => log::error!(
+                    "Failed to update anime seed status for [{}]: {:?}",
+                    mikan_id,
+                    e
+                ),
             }
         }
     }
+
     Ok(())
 }
 
