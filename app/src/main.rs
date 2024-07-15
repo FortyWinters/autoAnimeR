@@ -1,4 +1,5 @@
 use actix_web::{web, App, HttpServer};
+use actix_cors::Cors;
 use api::do_anime_task;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
@@ -41,7 +42,7 @@ async fn main() -> std::io::Result<()> {
         .expect("Failed to create qb client")));
     drop(conf);
 
-    let tastk_status = Arc::new(TokioRwLock::new(false));
+    let task_status = Arc::new(TokioRwLock::new(false));
     let video_file_lock = Arc::new(TokioRwLock::new(false));
     let mut db_connection = database_pool.get().unwrap();
 
@@ -55,11 +56,19 @@ async fn main() -> std::io::Result<()> {
                 .await;
     });
 
-    let http_server = HttpServer::new(move || {
+    HttpServer::new(move || {
+        let cors = Cors::default()
+            .allowed_origin("http://127.0.0.1:5173")
+            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+            .allowed_headers(vec![actix_web::http::header::AUTHORIZATION, actix_web::http::header::ACCEPT])
+            .allowed_header(actix_web::http::header::CONTENT_TYPE)
+            .max_age(3600);
+
         App::new()
+            .wrap(cors)
             .app_data(web::Data::new(database_pool.clone()))
             .app_data(web::Data::new(qb.clone()))
-            .app_data(web::Data::new(tastk_status.clone()))
+            .app_data(web::Data::new(task_status.clone()))
             .app_data(web::Data::new(video_file_lock.clone()))
             .app_data(web::Data::new(config.clone()))
             .configure(anime_routes_v2)
@@ -68,7 +77,6 @@ async fn main() -> std::io::Result<()> {
             .configure(video_routes_v2)
     })
     .bind(("0.0.0.0", 8080))?
-    .run();
-
-    http_server.await
+    .run()
+    .await
 }
