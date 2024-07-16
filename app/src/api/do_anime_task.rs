@@ -184,7 +184,7 @@ pub async fn create_anime_task_from_exist_files(
         let file = file?;
         let filename = file.file_name().to_string_lossy().to_string();
 
-        if ["seed", ".DS_Store", ".videoConfig.json"].contains(&filename.as_str()) {
+        if ["seed", ".DS_Store", ".videoConfig.json", "images"].contains(&filename.as_str()) {
             continue;
         }
 
