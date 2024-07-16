@@ -16,10 +16,27 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libssl-dev \
+          libsqlite3-dev \
+          libavcodec-dev \
+          libavdevice-dev \
+          libavfilter-dev \
+          libavformat-dev \
+          libavutil-dev \
+          libpostproc-dev \
+          libswresample-dev \
+          libswscale-dev
+    
     - name: Build
       run: |
         cd app
         cargo build --verbose
+        
     - name: Run tests
       run: |
         cd app
