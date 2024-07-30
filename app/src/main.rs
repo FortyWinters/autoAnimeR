@@ -13,7 +13,6 @@ mod mods;
 mod routers;
 mod schema;
 mod v2;
-use actix::spawn;
 use log4rs;
 use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
@@ -27,32 +26,44 @@ pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
     log4rs::init_file("./config/log4rs.yaml", Default::default()).unwrap();
-    
-    let config = Arc::new(TokioRwLock::new(Config::load_config("./config/config.yaml").await.unwrap()));
-    
+
+    let config = Arc::new(TokioRwLock::new(
+        Config::load_config("./config/config.yaml").await.unwrap(),
+    ));
+
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let database_pool = Pool::builder()
         .build(ConnectionManager::<SqliteConnection>::new(database_url))
         .expect("Failed to create pool.");
 
     let conf = config.read().await;
-    let qb = Arc::new(TokioRwLock::new(QbitTaskExecutor::new_with_config(&conf)
-        .await
-        .expect("Failed to create qb client")));
+    let qb = Arc::new(TokioRwLock::new(
+        QbitTaskExecutor::new_with_config(&conf)
+            .await
+            .expect("Failed to create qb client"),
+    ));
     drop(conf);
 
     let tastk_status = Arc::new(TokioRwLock::new(false));
     let video_file_lock = Arc::new(TokioRwLock::new(false));
-    let mut db_connection = database_pool.get().unwrap();
 
-    do_anime_task::add_default_filter(&config, &mut db_connection).await.unwrap();
+    {
+        let mut db_connection = database_pool.get().unwrap();
+        do_anime_task::add_default_filter(&config, &mut db_connection)
+            .await
+            .unwrap();
+    }
 
     let qb_for_task = Arc::clone(&qb);
     let video_file_lock_for_task = Arc::clone(&video_file_lock);
-    spawn(async move {
-        let _ =
-            do_anime_task::auto_update_rename_extract(&video_file_lock_for_task, &mut db_connection, &qb_for_task)
-                .await;
+    let database_pool_for_task = database_pool.clone();
+    tokio::spawn(async move {
+        let _ = do_anime_task::auto_update_rename_extract(
+            &video_file_lock_for_task,
+            &database_pool_for_task,
+            &qb_for_task,
+        )
+        .await;
     });
 
     let http_server = HttpServer::new(move || {

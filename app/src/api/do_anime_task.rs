@@ -598,19 +598,26 @@ pub struct VideoConfig {
 #[allow(dead_code)]
 pub async fn auto_update_rename_extract(
     video_file_lock: &Arc<TokioRwLock<bool>>,
-    db_connection: &mut PooledConnection<ConnectionManager<diesel::SqliteConnection>>,
+    pool: &diesel::r2d2::Pool<ConnectionManager<diesel::SqliteConnection>>,
     qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
 ) -> Result<(), Error> {
     log::info!("Start auto rename and update thread");
     loop {
-        let nb_new_finished_task = auto_update_handler(&qb_task_executor, db_connection)
-            .await
-            .map_err(|e| handle_error(e, "Failed to get finished task"))?;
+        {
+            let mut db_connection = pool.get().unwrap();
+            let nb_new_finished_task = auto_update_handler(&qb_task_executor, &mut db_connection)
+                .await
+                .map_err(|e| handle_error(e, "Failed to get finished task"))?;
 
-        if nb_new_finished_task > 0 {
-            auto_rename_and_extract_handler(&video_file_lock, &qb_task_executor, db_connection)
+            if nb_new_finished_task > 0 {
+                auto_rename_and_extract_handler(
+                    &video_file_lock,
+                    &qb_task_executor,
+                    &mut db_connection,
+                )
                 .await
                 .map_err(|e| handle_error(e, "Failed to execute rename task"))?;
+            }
         }
         sleep(Duration::from_secs(5)).await;
     }
