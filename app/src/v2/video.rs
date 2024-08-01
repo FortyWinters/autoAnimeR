@@ -267,24 +267,26 @@ async fn get_anime_progress_by_mikanid_and_episode(
         .get()
         .map_err(|e| handle_error(e, "failed to get db connection"))?;
 
-    Ok(dao::anime_progress::get_by_mikan_id_and_episode(
+    match dao::anime_progress::get_by_mikan_id_and_episode(
         &progress_id,
         &mikan_id,
         &episode,
         db_connection,
     )
     .await
-    .map_err(|e| {
-        handle_error(
-            e,
-            format!(
-                "Failed to get anime progress {} by [mikan_id: {}, episode: {}] ",
-                progress_id, mikan_id, episode
-            )
-            .as_str(),
-        )
-    })?
-    .progress_status)
+    {
+        Ok(p) => Ok(p.progress_status),
+        Err(e) => {
+            log::info!(
+                "Failed to get anime progress {} by [mikan_id: {}, episode: {}], {}",
+                progress_id,
+                mikan_id,
+                episode,
+                e
+            );
+            Ok(0)
+        }
+    }
 }
 
 async fn get_anime_progress_by_torrent(
@@ -296,21 +298,18 @@ async fn get_anime_progress_by_torrent(
         .get()
         .map_err(|e| handle_error(e, "failed to get db connection"))?;
 
-    Ok(
-        dao::anime_progress::get_by_torrent_name(progress_id, torrent_name, db_connection)
-            .await
-            .map_err(|e| {
-                handle_error(
-                    e,
-                    format!(
-                        "Failed to get anime progress {} by [torrent_name: {}] ",
-                        progress_id, torrent_name
-                    )
-                    .as_str(),
-                )
-            })?
-            .progress_status,
-    )
+    match dao::anime_progress::get_by_torrent_name(progress_id, torrent_name, db_connection).await {
+        Ok(p) => Ok(p.progress_status),
+        Err(e) => {
+            log::info!(
+                "Failed to get anime progress [{}] by [torrent: {}], {}",
+                progress_id,
+                torrent_name,
+                e
+            );
+            Ok(0)
+        }
+    }
 }
 
 #[post("/set_anime_progress")]
