@@ -1,5 +1,6 @@
 use actix_web::{web, App, HttpServer};
 use api::do_anime_task;
+use diesel::connection::SimpleConnection;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
 use mods::{config::Config, qb_api::QbitTaskExecutor};
@@ -35,6 +36,12 @@ async fn main() -> std::io::Result<()> {
     let database_pool = Pool::builder()
         .build(ConnectionManager::<SqliteConnection>::new(database_url))
         .expect("Failed to create pool.");
+    
+    {
+        let mut conn = database_pool.get().expect("Failed to get a connection from the pool");
+        conn.batch_execute("PRAGMA journal_mode=WAL;")
+            .expect("Failed to set WAL mode");
+    }
 
     let conf = config.read().await;
     let qb = Arc::new(TokioRwLock::new(

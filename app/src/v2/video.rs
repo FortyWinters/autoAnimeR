@@ -358,13 +358,12 @@ async fn set_anime_progress_by_torrent(
     item: &ReqAnimeProgress,
     pool: web::Data<Pool>,
 ) -> Result<(), Error> {
-    let db_connection = &mut pool
+    let mut db_connection = pool
         .get()
         .map_err(|e| handle_error(e, "failed to get db connection"))?;
-
     let quary_item = item.to_anime_progress_json();
 
-    dao::anime_progress::add_with_torrent_name(&quary_item, db_connection)
+    dao::anime_progress::add_with_torrent_name(&quary_item, &mut db_connection)
         .await
         .map_err(|e| {
             handle_error(
@@ -376,7 +375,7 @@ async fn set_anime_progress_by_torrent(
                 .as_str(),
             )
         })?;
-
+    drop(db_connection);
     Ok(())
 }
 
