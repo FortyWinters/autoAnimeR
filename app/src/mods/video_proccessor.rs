@@ -3,10 +3,12 @@ use anyhow::Error;
 use ffmpeg::{codec, encoder, format, media, Rational};
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::subtitle::Rect;
+use regex::Regex;
 use rsubs_lib::ssa;
 use rsubs_lib::vtt;
-use std::fs;
-use std::io::Write;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufRead, Write};
+use std::path::Path;
 
 #[derive(Debug)]
 pub struct SubtitleInfo {
@@ -83,12 +85,14 @@ pub async fn extract_subtitle(path: &String) -> Result<Vec<String>, Error> {
                 log::warn!("Failed to trans format to vtt for [{}]", path);
                 continue;
             }
-            match fs::remove_file(&output_file) {
-                Ok(_) => continue,
-                Err(_) => {
-                    log::warn!("Failed to remove tmp file [{}]", output_file);
-                    continue;
-                }
+            if let Err(e) = fs::remove_file(&output_file) {
+                log::warn!("Failed to remove tmp file [{}], {}", output_file, e);
+                continue;
+            }
+
+            if let Err(e) = strip_srt_tags_from_vtt(&vtt_path).await {
+                log::warn!("Failed to remove srt tag for [{}], {}", vtt_path, e);
+                continue;
             }
         } else {
             log::warn!("Failed to extract subtitle from {}", path);
@@ -220,6 +224,7 @@ fn format_timestamp(timestamp: i64, time_base: Rational) -> Result<String, Error
     Ok(buffer)
 }
 
+#[allow(dead_code)]
 fn add_basic_subtitle_info(mut file: &fs::File) -> Result<(), Error> {
     writeln!(file, "[Script Info]").expect("Failed to write to output file");
     writeln!(file, "; Font Subset: 53F530EY - HYXuanSong 65S")
@@ -268,6 +273,63 @@ fn add_basic_subtitle_info(mut file: &fs::File) -> Result<(), Error> {
     Ok(())
 }
 
+#[allow(dead_code)]
+pub async fn strip_srt_tags_from_vtt(path: &String) -> Result<(), Error> {
+    let lines: Vec<String> = read_lines(&path)?.filter_map(Result::ok).collect();
+
+    let html_tag_pattern = Regex::new(r"<.*?>").unwrap();
+    let srt_style_pattern = Regex::new(r"\{.*?\}").unwrap();
+    let jp_pattern = Regex::new(r"<.*?(JP|JPN|STAFF).*?>").unwrap();
+
+    let mut skip_indices = vec![];
+
+    for (i, line) in lines.iter().enumerate() {
+        if jp_pattern.is_match(&line) {
+            let start = if i >= 3 { i - 3 } else { 0 };
+            skip_indices.extend(start..=i);
+        }
+    }
+
+    let mut cleaned_lines: Vec<String> = Vec::new();
+
+    for (i, line) in lines.iter().enumerate() {
+        if !skip_indices.contains(&i) {
+            let without_html_tags = html_tag_pattern.replace_all(&line, "").to_string();
+            let cleaned_line = srt_style_pattern
+                .replace_all(&without_html_tags, "")
+                .to_string();
+            cleaned_lines.push(cleaned_line);
+        }
+    }
+
+    let mut timestamp_count = 1;
+    let mut output_lines: Vec<String> = Vec::new();
+
+    for line in cleaned_lines.iter() {
+        if line.starts_with("00:") {
+            output_lines.pop();
+            output_lines.push(format!("{}", timestamp_count));
+            timestamp_count += 1;
+        }
+        output_lines.push(line.to_string());
+    }
+
+    let mut output_file = OpenOptions::new().write(true).truncate(true).open(path)?;
+
+    for line in output_lines {
+        writeln!(output_file, "{}", line)?;
+    }
+    Ok(())
+}
+
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -289,8 +351,7 @@ mod test {
     #[tokio::test]
     pub async fn test_mp4() {
         let input_file = "".to_string();
-        let output_file =
-            "".to_string();
+        let output_file = "".to_string();
         let t = extract_mp4_subtitle(2 as usize, &input_file, &output_file)
             .await
             .unwrap();
