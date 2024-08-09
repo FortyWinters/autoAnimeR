@@ -111,7 +111,8 @@ impl QbitTaskExecutor {
 
         let login_endpoint = self.host.clone() + "api/v2/auth/login";
 
-        if let Ok(resp) = self.qbt_client
+        if let Ok(resp) = self
+            .qbt_client
             .post(login_endpoint)
             .header("Referer", &self.host)
             .form(&[
@@ -127,7 +128,7 @@ impl QbitTaskExecutor {
                         log::info!("[QB API] Successfully Connect to qbittorrent web api");
                         self.cookie = format!("{}={}", cookie.name(), cookie.value());
                         self.is_login = true;
-                        return Ok(())
+                        return Ok(());
                     }
                     None => log::error!("[QB API] Login error, without cookies found"),
                 }
@@ -143,7 +144,9 @@ impl QbitTaskExecutor {
 
     pub async fn qb_api_version(&self) -> Result<(), AnimeError> {
         if !self.is_login {
-            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+            return Err(AnimeError::new(
+                "[QB API] qbittorrent client not started".to_string(),
+            ));
         }
 
         let webapiversion_endpoint = self.host.clone() + "api/v2/app/webapiVersion";
@@ -172,7 +175,9 @@ impl QbitTaskExecutor {
         torrent_name: &String,
     ) -> Result<TorrentInfo, AnimeError> {
         if !self.is_login {
-            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+            return Err(AnimeError::new(
+                "[QB API] qbittorrent client not started".to_string(),
+            ));
         }
 
         let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
@@ -189,13 +194,12 @@ impl QbitTaskExecutor {
             let torrent_info_response_text = torrent_info_response.text().await.unwrap();
             let json: serde_json::Value =
                 serde_json::from_str(&torrent_info_response_text).unwrap();
-            let torrent_info = TorrentInfo::new(&json[0]).map_err(|e| {
-                handle_error(
-                    e,
-                    format!("Failed to construct new object by [{}] ", torrent_name).as_str(),
-                )
-            })?;
-            Ok(torrent_info)
+            if let Ok(torrent_info) = TorrentInfo::new(&json[0]) {
+                Ok(torrent_info)
+            }
+            else {
+                Ok(TorrentInfo::new_with_blank())
+            }
         } else {
             log::info!(
                 "[QB API] Unable to access qb web api: {}",
@@ -209,12 +213,14 @@ impl QbitTaskExecutor {
     }
 
     pub async fn qb_api_add_torrent(
-        & self,
+        &self,
         anime_name: &String,
         anime_seed_info: &AnimeSeed,
     ) -> Result<(), AnimeError> {
         if !self.is_login {
-            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+            return Err(AnimeError::new(
+                "[QB API] qbittorrent client not started".to_string(),
+            ));
         }
 
         let add_endpoint = self.host.clone() + "api/v2/torrents/add";
@@ -251,7 +257,9 @@ impl QbitTaskExecutor {
 
     pub async fn qb_api_del_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
         if !self.is_login {
-            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+            return Err(AnimeError::new(
+                "[QB API] qbittorrent client not started".to_string(),
+            ));
         }
 
         let delete_endpoint = self.host.clone() + "api/v2/torrents/delete";
@@ -279,7 +287,9 @@ impl QbitTaskExecutor {
         anime_seed_info: &AnimeSeed,
     ) -> Result<(), AnimeError> {
         if !self.is_login {
-            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+            return Err(AnimeError::new(
+                "[QB API] qbittorrent client not started".to_string(),
+            ));
         }
 
         let rename_file_endpoint = self.host.clone() + "api/v2/torrents/renameFile";
@@ -338,7 +348,9 @@ impl QbitTaskExecutor {
 
     pub async fn qb_api_resume_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
         if !self.is_login {
-            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+            return Err(AnimeError::new(
+                "[QB API] qbittorrent client not started".to_string(),
+            ));
         }
 
         let resume_endpoint = self.host.clone() + "api/v2/torrents/resume";
@@ -361,7 +373,9 @@ impl QbitTaskExecutor {
 
     pub async fn qb_api_pause_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
         if !self.is_login {
-            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+            return Err(AnimeError::new(
+                "[QB API] qbittorrent client not started".to_string(),
+            ));
         }
 
         let pause_endpoint = self.host.clone() + "api/v2/torrents/pause";
@@ -384,7 +398,9 @@ impl QbitTaskExecutor {
 
     pub async fn qb_api_completed_torrent_list(&self) -> Result<Vec<String>, AnimeError> {
         if !self.is_login {
-            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+            return Err(AnimeError::new(
+                "[QB API] qbittorrent client not started".to_string(),
+            ));
         }
 
         let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
@@ -431,7 +447,9 @@ impl QbitTaskExecutor {
 
     pub async fn qb_api_completed_torrent_set(&self) -> Result<HashSet<String>, AnimeError> {
         if !self.is_login {
-            return Err(AnimeError::new("[QB API] qbittorrent client not started".to_string()));
+            return Err(AnimeError::new(
+                "[QB API] qbittorrent client not started".to_string(),
+            ));
         }
 
         let torrent_info_endpoint = self.host.clone() + "api/v2/torrents/info";
@@ -582,6 +600,20 @@ impl TorrentInfo {
                 .unwrap()
                 .to_owned(),
         })
+    }
+
+    fn new_with_blank() -> Self {
+        TorrentInfo {
+            name: "".to_string(),
+            size: "".to_string(),
+            peers: "".to_string(),
+            done: "".to_string(),
+            seeds: "".to_string(),
+            download_speed: "".to_string(),
+            eta: "".to_string(),
+            hash: "".to_string(),
+            state: "".to_string(),
+        }
     }
 }
 

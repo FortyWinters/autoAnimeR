@@ -107,12 +107,12 @@ pub async fn get_qb_task(
     let mut task_qb_info_list: Vec<QbTaskJson> = Vec::new();
 
     for t in task_list {
-        let torrent_info = qb.qb_api_torrent_info(&t.torrent_name).await.unwrap();
-
-        task_qb_info_list.push(QbTaskJson {
-            torrent_name: t.torrent_name,
-            progress: torrent_info.done,
-        });
+        if let Ok(torrent_info) = qb.qb_api_torrent_info(&t.torrent_name).await{
+            task_qb_info_list.push(QbTaskJson {
+                torrent_name: t.torrent_name,
+                progress: torrent_info.done,
+            });
+        }
     }
     Ok(task_qb_info_list)
 }
