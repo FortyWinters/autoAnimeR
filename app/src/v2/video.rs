@@ -40,10 +40,10 @@ pub async fn get_video_detail_handler(
     let db_connection = &mut pool
         .get()
         .map_err(|e| handle_error(e, "failed to get db connection"))?;
-    let res = get_anime_detail(&item.torrent_name, video_file_lock, qb, db_connection)
-        .await
-        .unwrap();
-    Ok(HttpResponse::Ok().json(res))
+    match get_anime_detail(&item.torrent_name, video_file_lock, qb, db_connection).await {
+        Ok(res) => Ok(HttpResponse::Ok().json(res)),
+        Err(e) => Err(Error::from(e))
+    } 
 }
 
 async fn get_anime_detail(
