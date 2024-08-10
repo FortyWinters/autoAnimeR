@@ -1,3 +1,4 @@
+use actix_files::Files;
 use actix_web::{web, App, HttpServer};
 use api::do_anime_task;
 use diesel::connection::SimpleConnection;
@@ -36,14 +37,17 @@ async fn main() -> std::io::Result<()> {
     let database_pool = Pool::builder()
         .build(ConnectionManager::<SqliteConnection>::new(database_url))
         .expect("Failed to create pool.");
-    
+
     {
-        let mut conn = database_pool.get().expect("Failed to get a connection from the pool");
+        let mut conn = database_pool
+            .get()
+            .expect("Failed to get a connection from the pool");
         conn.batch_execute("PRAGMA journal_mode=WAL;")
             .expect("Failed to set WAL mode");
     }
 
     let conf = config.read().await;
+    let download_path = conf.download_path.clone();
     let qb = Arc::new(TokioRwLock::new(
         QbitTaskExecutor::new_with_config(&conf)
             .await
@@ -64,6 +68,7 @@ async fn main() -> std::io::Result<()> {
     let qb_for_task = Arc::clone(&qb);
     let video_file_lock_for_task = Arc::clone(&video_file_lock);
     let database_pool_for_task = database_pool.clone();
+
     tokio::spawn(async move {
         let _ = do_anime_task::auto_update_rename_extract(
             &video_file_lock_for_task,
@@ -88,5 +93,22 @@ async fn main() -> std::io::Result<()> {
     .bind(("0.0.0.0", 8080))?
     .run();
 
-    http_server.await
+    let file_server = HttpServer::new(move || {
+        let path = download_path.clone();
+        App::new().service(Files::new("/", path).show_files_listing())
+    })
+    .bind(("0.0.0.0", 9999))?
+    .run();
+
+    let (http_result, file_result) = tokio::join!(http_server, file_server);
+
+    if let Err(e) = http_result {
+        log::error!("HTTP server encountered an error: {:?}", e);
+    }
+
+    if let Err(e) = file_result {
+        log::error!("File server encountered an error: {:?}", e);
+    }
+
+    Ok(())
 }

@@ -37,7 +37,7 @@ pub async fn do_spider_task(
                     st_anime_vec.extend(st_anime);
                 }
                 Err(_) => {
-                    println!("get subgroup failed")
+                    log::debug!("get subgroup failed")
                 }
             }
         }
@@ -74,7 +74,7 @@ pub async fn do_spider_task(
                     st_seed_vec.extend(st_seed);
                 }
                 Err(_) => {
-                    println!("get subgroup failed")
+                    log::debug!("get subgroup failed")
                 }
             }
         }

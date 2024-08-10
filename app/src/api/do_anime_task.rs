@@ -356,8 +356,7 @@ pub async fn filter_and_download(
             }
         }
     }
-    log::info!("download failed vec: {:?}", download_failed_vec);
-    // println!("download_failed_vec: {:?}", download_failed_vec);
+    log::debug!("download failed vec: {:?}", download_failed_vec);
 
     // 更新 anime_seed table
     let mut anime_task_info_vec: Vec<AnimeTaskJson> = Vec::new();

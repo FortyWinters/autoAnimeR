@@ -124,20 +124,24 @@ async fn extract_mkv_subtitle(
     }
 
     octx.set_metadata(ictx.metadata().to_owned());
-    octx.write_header().unwrap();
-
-    for (stream, mut packet) in ictx.packets() {
-        if stream.index() == subtitle_stream_index {
-            let ost = octx.stream(0).unwrap();
-            packet.rescale_ts(ist_time_base, ost.time_base());
-            packet.set_stream(0);
-            packet.write_interleaved(&mut octx).unwrap();
+    match octx.write_header() {
+        Ok(_) => {
+            for (stream, mut packet) in ictx.packets() {
+                if stream.index() == subtitle_stream_index {
+                    let ost = octx.stream(0).unwrap();
+                    packet.rescale_ts(ist_time_base, ost.time_base());
+                    packet.set_stream(0);
+                    packet.write_interleaved(&mut octx).unwrap();
+                }
+            }
+            octx.write_trailer().unwrap();
+            Ok(())
+        }
+        Err(e) => {
+            log::warn!("failed to write header for [{}], {}", input_file, e);
+            Err(Error::from(e))
         }
     }
-
-    octx.write_trailer().unwrap();
-
-    Ok(())
 }
 
 #[allow(dead_code)]
