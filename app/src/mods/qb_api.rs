@@ -8,9 +8,8 @@ use serde_json;
 use std::collections::HashSet;
 use std::time::{Duration, UNIX_EPOCH};
 
-pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> AnimeError {
-    log::error!("{}, error: {:?}", message, e);
-    AnimeError::new("Internal error".to_string())
+pub fn handle_error<E: std::fmt::Debug>(e: E, _message: &str) -> AnimeError {
+    AnimeError::new(format!("{:?}", e))
 }
 
 #[derive(Debug, Clone)]
@@ -194,11 +193,10 @@ impl QbitTaskExecutor {
             let torrent_info_response_text = torrent_info_response.text().await.unwrap();
             let json: serde_json::Value =
                 serde_json::from_str(&torrent_info_response_text).unwrap();
-            if let Ok(torrent_info) = TorrentInfo::new(&json[0]) {
-                Ok(torrent_info)
-            }
-            else {
-                Ok(TorrentInfo::new_with_blank())
+            match TorrentInfo::new(&json[0]) 
+            {
+                Ok(torrent_info) => Ok(torrent_info),
+                Err(e) => Err(e)
             }
         } else {
             log::info!(
@@ -600,20 +598,6 @@ impl TorrentInfo {
                 .unwrap()
                 .to_owned(),
         })
-    }
-
-    fn new_with_blank() -> Self {
-        TorrentInfo {
-            name: "".to_string(),
-            size: "".to_string(),
-            peers: "".to_string(),
-            done: "".to_string(),
-            seeds: "".to_string(),
-            download_speed: "".to_string(),
-            eta: "".to_string(),
-            hash: "".to_string(),
-            state: "".to_string(),
-        }
     }
 }
 
