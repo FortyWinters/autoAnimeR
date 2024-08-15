@@ -1,14 +1,20 @@
 use crate::api::do_anime_task::handle_error;
 use anyhow::Error;
-use ffmpeg::{codec, encoder, format, media, Rational};
+use ffmpeg::{
+    codec, decoder, encoder, format, frame, media, picture, software, subtitle::Rect, Dictionary,
+    Packet, Rational,
+};
 use ffmpeg_next as ffmpeg;
-use ffmpeg_next::subtitle::Rect;
+use ffmpeg_next::ffi::{av_hwdevice_get_type_name, av_hwdevice_iterate_types, AVHWDeviceType};
 use regex::Regex;
-use rsubs_lib::ssa;
-use rsubs_lib::vtt;
+use rsubs_lib::{ssa, vtt};
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::ffi::CStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, Write};
 use std::path::Path;
+use std::time::Instant;
 
 #[derive(Debug)]
 pub struct SubtitleInfo {
@@ -170,7 +176,8 @@ pub async fn extract_mp4_subtitle(
     let mut decoder = context_decoder.decoder().subtitle()?;
 
     let mut file = fs::File::create(output_file)?;
-    add_basic_subtitle_info(&file).unwrap();
+    let config = load_config("./config/subtitle_config.yaml").unwrap();
+    add_basic_subtitle_info(&file, &config)?;
 
     for (stream, packet) in ictx.packets() {
         if stream.index() == subtitle_stream_index {
@@ -228,52 +235,68 @@ fn format_timestamp(timestamp: i64, time_base: Rational) -> Result<String, Error
     Ok(buffer)
 }
 
-#[allow(dead_code)]
-fn add_basic_subtitle_info(mut file: &fs::File) -> Result<(), Error> {
-    writeln!(file, "[Script Info]").expect("Failed to write to output file");
-    writeln!(file, "; Font Subset: 53F530EY - HYXuanSong 65S")
-        .expect("Failed to write to output file");
-    writeln!(file, "; Font Subset: H51RRKUV - FZLanTingHei-DB-GBK")
-        .expect("Failed to write to output file");
-    writeln!(file, "; Font Subset: YT7S98V8 - FZYaSong-M-GBK")
-        .expect("Failed to write to output file");
-    writeln!(file, "; Font Subset: HENI15HU - Source Han Sans JP")
-        .expect("Failed to write to output file");
-    writeln!(file, "; Font Subset: HKABK2M7 - Source Han Sans CN")
-        .expect("Failed to write to output file");
-    writeln!(file, "; Font Subset: THPFH7R9 - FOT-Matisse Pro M")
-        .expect("Failed to write to output file");
-    writeln!(file, "; Font Subset: USPWBSGJ - FZYaSong-R-GBK")
-        .expect("Failed to write to output file");
-    writeln!(file, "; Font Subset: VRVYS57Y - Source Han Sans TW")
-        .expect("Failed to write to output file");
-    writeln!(file, "Title: Subtitle File").expect("Failed to write to output file");
-    writeln!(file, "ScriptType: v4.00+").expect("Failed to write to output file");
-    writeln!(file, "WrapStyle: 0").expect("Failed to write to output file");
-    writeln!(file, "ScaledBorderAndShadow: yes").expect("Failed to write to output file");
-    writeln!(file, "PlayResX: 1920").expect("Failed to write to output file");
-    writeln!(file, "PlayResY: 1080").expect("Failed to write to output file");
-    writeln!(file, "").expect("Failed to write to output file");
+#[derive(Deserialize)]
+struct SubtitleConfig {
+    script_info: ScriptInfo,
+    fonts: Fonts,
+    styles: Styles,
+    events: Events,
+}
 
-    writeln!(file, "[V4+ Styles]").expect("Failed to write to output file");
-    writeln!(file, "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding").expect("Failed to write to output file");
-    writeln!(file, "Style: Default,H51RRKUV,65,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,15,1").expect("Failed to write to output file");
-    writeln!(file, "Style: Top,H51RRKUV,60,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,8,10,10,15,1").expect("Failed to write to output file");
-    writeln!(file, "Style: Screen,YT7S98V8,60,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,10,10,15,1").expect("Failed to write to output file");
-    writeln!(file, "Style: Staff,53F530EY,53,&H00FFFFFF,&H000000FF,&H00000000,&H14000000,0,0,0,0,100,100,0,0,1,2.5,0,8,22,22,20,1").expect("Failed to write to output file");
-    writeln!(file, "Style: Title,YT7S98V8,75,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,1,2,7,10,10,15,1").expect("Failed to write to output file");
-    writeln!(file, "Style: OP_JP,HENI15HU,68,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,2,0,2,10,10,45,1").expect("Failed to write to output file");
-    writeln!(file, "Style: OP_CHS,HKABK2M7,70,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,2,0,8,10,10,35,1").expect("Failed to write to output file");
-    writeln!(file, "Style: ED_JP,THPFH7R9,50,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0.8,1.5,2,10,10,15,1").expect("Failed to write to output file");
-    writeln!(file, "Style: ED_CH,USPWBSGJ,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,2,0,1,0.8,1.5,8,10,10,25,1").expect("Failed to write to output file");
-    writeln!(file, "").expect("Failed to write to output file");
+#[derive(Deserialize)]
+struct ScriptInfo {
+    title: String,
+    script_type: String,
+    wrap_style: i32,
+    scaled_border_and_shadow: String,
+    play_res_x: i32,
+    play_res_y: i32,
+}
 
-    writeln!(file, "[Events]").expect("Failed to write to output file");
-    writeln!(
-        file,
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
-    )
-    .expect("Failed to write to output file");
+#[derive(Deserialize)]
+struct Fonts {
+    subsets: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct Styles {
+    formats: String,
+    entries: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct Events {
+    format: String,
+}
+
+fn load_config(file_path: &str) -> Result<SubtitleConfig, Error> {
+    let config_content = fs::read_to_string(file_path).unwrap();
+    let config: SubtitleConfig = serde_yml::from_str(&config_content).unwrap();
+    Ok(config)
+}
+
+fn add_basic_subtitle_info(mut file: &fs::File, config: &SubtitleConfig) -> Result<(), Error> {
+    writeln!(file, "[Script Info]")?;
+    for subset in &config.fonts.subsets {
+        writeln!(file, "; Font Subset: {}", subset)?;
+    }
+    writeln!(file, "Title: {}", config.script_info.title)?;
+    writeln!(file, "ScriptType: {}", config.script_info.script_type)?;
+    writeln!(file, "WrapStyle: {}", config.script_info.wrap_style)?;
+    writeln!(file, "ScaledBorderAndShadow: {}", config.script_info.scaled_border_and_shadow)?;
+    writeln!(file, "PlayResX: {}", config.script_info.play_res_x)?;
+    writeln!(file, "PlayResY: {}", config.script_info.play_res_y)?;
+    writeln!(file, "")?;
+
+    writeln!(file, "[V4+ Styles]")?;
+    writeln!(file, "Format: {}", config.styles.formats)?;
+    for entry in &config.styles.entries {
+        writeln!(file, "Style: {}", entry)?;
+    }
+    writeln!(file, "")?;
+
+    writeln!(file, "[Events]")?;
+    writeln!(file, "Format: {}", config.events.format)?;
     Ok(())
 }
 
@@ -334,31 +357,339 @@ where
     Ok(io::BufReader::new(file).lines())
 }
 
+#[allow(dead_code)]
+pub fn get_av_hwaccels() -> Result<Vec<String>, Error> {
+    let mut device_type = AVHWDeviceType::AV_HWDEVICE_TYPE_NONE;
+    let mut av_codec_vec = Vec::new();
+
+    unsafe {
+        while {
+            device_type = av_hwdevice_iterate_types(device_type);
+            device_type != AVHWDeviceType::AV_HWDEVICE_TYPE_NONE
+        } {
+            let type_name = av_hwdevice_get_type_name(device_type);
+
+            if !type_name.is_null() {
+                let c_str = CStr::from_ptr(type_name);
+                let str_slice = c_str.to_str()?;
+                av_codec_vec.push(str_slice.to_string());
+            }
+        }
+    }
+
+    Ok(av_codec_vec)
+}
+
+/*
+    videotoolbox    -> h264_videotoolbox    -> Macos, M1/2/3
+    cuda            -> h264_nvenc           -> Windows, Nvidia GPU,
+    vaapi           -> h264_vaapi           -> Linux, Intel GPU, AMD GPU
+    qsv             -> h264_qsv             -> Windows, Linux, Intel GPU,
+    dxva2                                   -> Windows, Intel GPU, AMD GPU, NVIDIA GPU,
+    d3d11va                                 -> Windows, Intel GPU, AMD GPU, NVIDIA GPU, DX11
+    d3d12va                                 -> Windows, Intel GPU, AMD GPU, NVIDIA GPU, DX12
+    opencl
+    vulkan
+*/
+
+#[allow(dead_code)]
+fn trans_hwaccels_2_codec_name(av_codec_vec: Vec<String>) -> String {
+    let os_name = std::env::consts::OS;
+
+    let codec_name = match os_name {
+        "macos" => {
+            if av_codec_vec.contains(&"videotoolbox".to_string()) {
+                "h264_videotoolbox"
+            } else {
+                "h264"
+            }
+        }
+        "windows" | "linux" => {
+            if av_codec_vec.contains(&"cuda".to_string()) {
+                "h264_nvenc"
+            } else if av_codec_vec.contains(&"qsv".to_string()) {
+                "h264_qsv"
+            } else if av_codec_vec.contains(&"vaapi".to_string()) {
+                "h264_vaapi"
+            } else {
+                "h264"
+            }
+        }
+        _ => "h264",
+    };
+
+    codec_name.to_string()
+}
+
+struct Transcoder {
+    ost_index: usize,
+    decoder: decoder::Video,
+    input_time_base: Rational,
+    encoder: encoder::Video,
+    logging_enabled: bool,
+    frame_count: usize,
+    last_log_frame_count: usize,
+    starting_time: Instant,
+    last_log_time: Instant,
+}
+
+impl Transcoder {
+    fn new(
+        ist: &format::stream::Stream,
+        octx: &mut format::context::Output,
+        ost_index: usize,
+        x264_opts: Dictionary,
+        enable_logging: bool,
+    ) -> Result<Self, ffmpeg::Error> {
+        let global_header = octx.format().flags().contains(format::Flags::GLOBAL_HEADER);
+        let decoder = ffmpeg::codec::context::Context::from_parameters(ist.parameters())?
+            .decoder()
+            .video()?;
+
+        let codec = match get_av_hwaccels() {
+            Ok(av_codec_vec) if !av_codec_vec.is_empty() => {
+                let codec_name = trans_hwaccels_2_codec_name(av_codec_vec);
+                log::info!("Use hardware decoder [{}] to speed up decoding", codec_name);
+                encoder::find_by_name(&codec_name)
+            }
+            _ => {
+                log::info!("Does not support hardware accelerated decoding, uses CPU decoding");
+                encoder::find(codec::Id::H264)
+            }
+        };
+
+        let mut ost = octx.add_stream(codec)?;
+
+        let mut encoder =
+            codec::context::Context::new_with_codec(codec.ok_or(ffmpeg::Error::InvalidData)?)
+                .encoder()
+                .video()?;
+        ost.set_parameters(&encoder);
+        encoder.set_height(decoder.height());
+        encoder.set_width(decoder.width());
+        encoder.set_aspect_ratio(decoder.aspect_ratio());
+        encoder.set_format(format::Pixel::NV12);
+        encoder.set_frame_rate(decoder.frame_rate());
+        encoder.set_time_base(ist.time_base());
+
+        if global_header {
+            encoder.set_flags(codec::Flags::GLOBAL_HEADER);
+        }
+
+        let opened_encoder = encoder
+            .open_with(x264_opts)
+            .expect("error opening x264 with supplied settings");
+        ost.set_parameters(&opened_encoder);
+
+        Ok(Self {
+            ost_index,
+            decoder,
+            input_time_base: ist.time_base(),
+            encoder: opened_encoder,
+            logging_enabled: enable_logging,
+            frame_count: 0,
+            last_log_frame_count: 0,
+            starting_time: Instant::now(),
+            last_log_time: Instant::now(),
+        })
+    }
+
+    fn send_packet_to_decoder(&mut self, packet: &Packet) {
+        self.decoder.send_packet(packet).unwrap();
+    }
+
+    fn send_eof_to_decoder(&mut self) {
+        self.decoder.send_eof().unwrap();
+    }
+
+    fn receive_and_process_decoded_frames(
+        &mut self,
+        octx: &mut format::context::Output,
+        ost_time_base: Rational,
+    ) {
+        let mut frame = frame::Video::empty();
+        while self.decoder.receive_frame(&mut frame).is_ok() {
+            self.frame_count += 1;
+            let timestamp = frame.timestamp();
+
+            self.log_progress(f64::from(
+                Rational(timestamp.unwrap_or(0) as i32, 1) * self.input_time_base,
+            ));
+
+            if frame.format() != format::Pixel::NV12 {
+                let mut converted_frame = frame::Video::empty();
+                converted_frame.set_format(format::Pixel::NV12);
+                converted_frame.set_width(frame.width());
+                converted_frame.set_height(frame.height());
+
+                let mut converter = software::scaling::context::Context::get(
+                    frame.format(),
+                    frame.width(),
+                    frame.height(),
+                    format::Pixel::NV12,
+                    frame.width(),
+                    frame.height(),
+                    software::scaling::Flags::BILINEAR,
+                )
+                .unwrap();
+
+                if let Err(e) = converter.run(&frame, &mut converted_frame) {
+                    log::error!("Error during frame conversion: {:?}", e);
+                    return;
+                }
+                frame = converted_frame;
+            }
+            frame.set_pts(timestamp);
+            frame.set_kind(picture::Type::None);
+            self.send_frame_to_encoder(&frame);
+            self.receive_and_process_encoded_packets(octx, ost_time_base);
+        }
+    }
+
+    fn send_frame_to_encoder(&mut self, frame: &frame::Video) {
+        self.encoder.send_frame(frame).unwrap();
+    }
+
+    fn send_eof_to_encoder(&mut self) {
+        self.encoder.send_eof().unwrap();
+    }
+
+    fn receive_and_process_encoded_packets(
+        &mut self,
+        octx: &mut format::context::Output,
+        ost_time_base: Rational,
+    ) {
+        let mut encoded = Packet::empty();
+        while self.encoder.receive_packet(&mut encoded).is_ok() {
+            encoded.set_stream(self.ost_index);
+            encoded.rescale_ts(self.input_time_base, ost_time_base);
+            encoded.write_interleaved(octx).unwrap();
+        }
+    }
+
+    fn log_progress(&mut self, timestamp: f64) {
+        if !self.logging_enabled
+            || (self.frame_count - self.last_log_frame_count < 100
+                && self.last_log_time.elapsed().as_secs_f64() < 1.0)
+        {
+            return;
+        }
+        log::info!(
+            "time elpased: \t{:8.2}\tframe count: {:8}\ttimestamp: {:8.2}",
+            self.starting_time.elapsed().as_secs_f64(),
+            self.frame_count,
+            timestamp
+        );
+
+        self.last_log_frame_count = self.frame_count;
+        self.last_log_time = Instant::now();
+    }
+}
+
+#[allow(dead_code)]
+pub async fn trans_mkv_2_mp4(input_file: &String) -> Result<(), Error> {
+    ffmpeg::init().unwrap();
+    let output_file = format!("{}.mp4", input_file.split(".").next().unwrap());
+
+    let mut x264_opts = Dictionary::new();
+    x264_opts.set("preset", "medium");
+
+    let mut ictx = format::input(&input_file).unwrap();
+    let mut octx = format::output(&output_file).unwrap();
+
+    format::context::input::dump(&ictx, 0, Some(&input_file));
+
+    let best_video_stream_index = ictx
+        .streams()
+        .best(media::Type::Video)
+        .map(|stream| stream.index());
+    let mut stream_mapping: Vec<isize> = vec![0; ictx.nb_streams() as _];
+    let mut ist_time_bases = vec![Rational(0, 0); ictx.nb_streams() as _];
+    let mut ost_time_bases = vec![Rational(0, 0); ictx.nb_streams() as _];
+    let mut transcoders = HashMap::new();
+    let mut ost_index = 0;
+
+    for (ist_index, ist) in ictx.streams().enumerate() {
+        let ist_medium = ist.parameters().medium();
+        if ist_medium != media::Type::Audio && ist_medium != media::Type::Video {
+            stream_mapping[ist_index] = -1;
+            continue;
+        }
+        stream_mapping[ist_index] = ost_index;
+        ist_time_bases[ist_index] = ist.time_base();
+        if ist_medium == media::Type::Video {
+            transcoders.insert(
+                ist_index,
+                Transcoder::new(
+                    &ist,
+                    &mut octx,
+                    ost_index as _,
+                    x264_opts.to_owned(),
+                    Some(ist_index) == best_video_stream_index,
+                )
+                .unwrap(),
+            );
+        } else {
+            let mut ost = octx.add_stream(encoder::find(codec::Id::None)).unwrap();
+            ost.set_parameters(ist.parameters());
+            unsafe {
+                (*ost.parameters().as_mut_ptr()).codec_tag = 0;
+            }
+            continue;
+        }
+        ost_index += 1;
+    }
+
+    octx.set_metadata(ictx.metadata().to_owned());
+    format::context::output::dump(&octx, 0, Some(&output_file));
+    octx.write_header().unwrap();
+
+    for (ost_index, _) in octx.streams().enumerate() {
+        ost_time_bases[ost_index] = octx.stream(ost_index as _).unwrap().time_base();
+    }
+
+    for (stream, mut packet) in ictx.packets() {
+        let ist_index = stream.index();
+        let ost_index = stream_mapping[ist_index];
+        if ost_index < 0 {
+            continue;
+        }
+        let ost_time_base = ost_time_bases[ost_index as usize];
+        match transcoders.get_mut(&ist_index) {
+            Some(transcoder) => {
+                transcoder.send_packet_to_decoder(&packet);
+                transcoder.receive_and_process_decoded_frames(&mut octx, ost_time_base);
+            }
+            None => {
+                packet.rescale_ts(ist_time_bases[ist_index], ost_time_base);
+                packet.set_position(-1);
+                packet.set_stream(ost_index as _);
+                packet.write_interleaved(&mut octx).unwrap();
+            }
+        }
+    }
+
+    for (ost_index, transcoder) in transcoders.iter_mut() {
+        let ost_time_base = ost_time_bases[*ost_index];
+        transcoder.send_eof_to_decoder();
+        transcoder.receive_and_process_decoded_frames(&mut octx, ost_time_base);
+        transcoder.send_eof_to_encoder();
+        transcoder.receive_and_process_encoded_packets(&mut octx, ost_time_base);
+    }
+
+    octx.write_trailer().unwrap();
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[tokio::test]
-    pub async fn test_get_subtitle_info() {
-        let input_file = "".to_string();
-        let t = get_subtitle_info(&input_file).await.unwrap();
-        println!("{:?}", t);
-    }
-
-    #[tokio::test]
-    pub async fn test_extract() {
-        let input_file = "".to_string();
-        let t = extract_subtitle(&input_file).await.unwrap();
-        println!("{:?}", t);
-    }
-
-    #[tokio::test]
-    pub async fn test_mp4() {
-        let input_file = "".to_string();
-        let output_file = "".to_string();
-        let t = extract_mp4_subtitle(2 as usize, &input_file, &output_file)
-            .await
-            .unwrap();
-        println!("{:?}", t);
+    pub async fn test() {
+        let input_file =
+            "downloads/狼与香辛料 行商邂逅贤狼(3330)/狼与香辛料 行商邂逅贤狼 - 1 - LoliHouse.mkv"
+                .to_string();
+        let _t = trans_mkv_2_mp4(&input_file).await.unwrap();
     }
 }
