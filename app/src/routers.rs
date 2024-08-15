@@ -50,5 +50,7 @@ pub fn video_routes_v2(cfg: &mut web::ServiceConfig) {
             .service(extract_subtitle_handle)
             .service(get_anime_progress_handler)
             .service(set_anime_progress_handler)
+            .service(check_hw_accels_handler)
+            .service(trans_video_format_handler)
     );
 }

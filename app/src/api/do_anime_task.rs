@@ -835,6 +835,43 @@ pub async fn add_default_filter(
     Ok(())
 }
 
+pub async fn get_filepath_by_torrent_name(
+    torrent_name: &String,
+    download_path: &String,
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+) -> Result<String, Error> {
+    let anime_task = dao::anime_task::get_by_torrent_name(db_connection, &torrent_name)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                &format!(
+                    "Failed to get anime_task by torrent_name: [{}]",
+                    torrent_name
+                ),
+            )
+        })?;
+
+    let anime_name = dao::anime_list::get_by_mikanid(db_connection, anime_task.mikan_id)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                &format!(
+                    "Failed to get anime_list by torrent_name: [{}]",
+                    torrent_name
+                ),
+            )
+        })?
+        .anime_name;
+
+    let path = format!(
+        "{}/{}({})/{}",
+        download_path, anime_name, anime_task.mikan_id, anime_task.filename
+    );
+    Ok(path)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

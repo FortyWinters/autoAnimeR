@@ -1,9 +1,10 @@
 use crate::api::do_anime_task::{self, VideoConfig};
 use crate::models::anime_progess::AnimeProgressJson;
+use crate::mods::config::Config;
 use crate::mods::qb_api::QbitTaskExecutor;
-use crate::mods::video_proccessor;
-use crate::{dao, Pool};
-use actix_web::{post, web, Error, HttpResponse};
+use crate::mods::video_proccessor::{self, get_av_hwaccels, trans_mkv_2_mp4};
+use crate::{api, dao, Pool};
+use actix_web::{get, post, web, Error, HttpResponse};
 use anyhow::Result;
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::SqliteConnection;
@@ -42,8 +43,8 @@ pub async fn get_video_detail_handler(
         .map_err(|e| handle_error(e, "failed to get db connection"))?;
     match get_anime_detail(&item.torrent_name, video_file_lock, qb, db_connection).await {
         Ok(res) => Ok(HttpResponse::Ok().json(res)),
-        Err(e) => Err(Error::from(e))
-    } 
+        Err(e) => Err(Error::from(e)),
+    }
 }
 
 async fn get_anime_detail(
@@ -128,11 +129,9 @@ pub async fn extract_subtitle_handle(
     let db_connection = &mut pool
         .get()
         .map_err(|e| handle_error(e, "failed to get db connection"))?;
-
     extract_subtitle(&item.torrent_name, video_file_lock, qb, db_connection)
         .await
         .map_err(|e| handle_error(e, "Failed to extract subtitle"))?;
-
     Ok(HttpResponse::Ok().json("ok"))
 }
 
@@ -379,6 +378,66 @@ async fn set_anime_progress_by_torrent(
     Ok(())
 }
 
+#[get("/check_hw_accels")]
+async fn check_hw_accels_handler() -> Result<HttpResponse, Error> {
+    match get_av_hwaccels() {
+        Ok(res) => {
+            let codec_name = video_proccessor::trans_hwaccels_2_codec_name(res);
+            if codec_name != "h264" {
+                Ok(HttpResponse::Ok().json(codec_name))
+            } else {
+                Ok(HttpResponse::Ok().json(""))
+            }
+        }
+        Err(e) => {
+            log::info!("Failed to get av_hwaccels_vec, Err: {}", e);
+            Ok(HttpResponse::BadRequest().body("Failed to get av_hwaccels_vec"))
+        }
+    }
+}
+
+#[post("/trans_video_format")]
+async fn trans_video_format_handler(
+    item: web::Json<TorrentName>,
+    pool: web::Data<Pool>,
+    config: web::Data<Arc<TokioRwLock<Config>>>,
+) -> Result<HttpResponse, Error> {
+    let download_path = {
+        let config = config.read().await;
+        config.download_path.clone()
+    };
+
+    let mut db_connection = pool
+        .get()
+        .map_err(|e| handle_error(e, "Failed to get DB connection"))?;
+
+    let path = api::do_anime_task::get_filepath_by_torrent_name(
+        &item.torrent_name,
+        &download_path,
+        &mut db_connection,
+    )
+    .await
+    .map_err(|e| {
+        handle_error(
+            e,
+            &format!(
+                "failed to get filepath by torrent_name: {}",
+                item.torrent_name
+            ),
+        )
+    })?;
+
+    drop(db_connection);
+
+    tokio::spawn(async move {
+        match trans_mkv_2_mp4(&path).await {
+            Ok(_) => log::info!("Successfully converted video: {}", path),
+            Err(e) => log::error!("Failed to convert video: {}, Err: {}", path, e),
+        }
+    });
+
+    Ok(HttpResponse::Ok().json("Video conversion started"))
+}
 #[cfg(test)]
 mod test {
     use super::*;

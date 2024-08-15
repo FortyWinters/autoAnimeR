@@ -283,7 +283,11 @@ fn add_basic_subtitle_info(mut file: &fs::File, config: &SubtitleConfig) -> Resu
     writeln!(file, "Title: {}", config.script_info.title)?;
     writeln!(file, "ScriptType: {}", config.script_info.script_type)?;
     writeln!(file, "WrapStyle: {}", config.script_info.wrap_style)?;
-    writeln!(file, "ScaledBorderAndShadow: {}", config.script_info.scaled_border_and_shadow)?;
+    writeln!(
+        file,
+        "ScaledBorderAndShadow: {}",
+        config.script_info.scaled_border_and_shadow
+    )?;
     writeln!(file, "PlayResX: {}", config.script_info.play_res_x)?;
     writeln!(file, "PlayResY: {}", config.script_info.play_res_y)?;
     writeln!(file, "")?;
@@ -393,7 +397,7 @@ pub fn get_av_hwaccels() -> Result<Vec<String>, Error> {
 */
 
 #[allow(dead_code)]
-fn trans_hwaccels_2_codec_name(av_codec_vec: Vec<String>) -> String {
+pub fn trans_hwaccels_2_codec_name(av_codec_vec: Vec<String>) -> String {
     let os_name = std::env::consts::OS;
 
     let codec_name = match os_name {
@@ -449,8 +453,13 @@ impl Transcoder {
         let codec = match get_av_hwaccels() {
             Ok(av_codec_vec) if !av_codec_vec.is_empty() => {
                 let codec_name = trans_hwaccels_2_codec_name(av_codec_vec);
-                log::info!("Use hardware decoder [{}] to speed up decoding", codec_name);
-                encoder::find_by_name(&codec_name)
+                if codec_name == "h264" {
+                    log::info!("Does not support hardware accelerated decoding, uses CPU decoding");
+                    encoder::find(codec::Id::H264)
+                } else {
+                    log::info!("Use hardware decoder [{}] to speed up decoding", codec_name);
+                    encoder::find_by_name(&codec_name)
+                }
             }
             _ => {
                 log::info!("Does not support hardware accelerated decoding, uses CPU decoding");
