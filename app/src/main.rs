@@ -73,7 +73,7 @@ async fn main() -> std::io::Result<()> {
         let _ = do_anime_task::auto_update_rename_extract(
             &video_file_lock_for_task,
             &database_pool_for_task,
-            &qb_for_task,
+            &qb_for_task
         )
         .await;
     });

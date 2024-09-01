@@ -13,6 +13,7 @@ use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::SqliteConnection;
 use futures::future::join_all;
 use log;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -20,13 +21,21 @@ use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{prelude::*, Read, Write};
 use std::sync::Arc;
-use tokio::sync::RwLock as TokioRwLock;
+use tokio::sync::{watch, RwLock as TokioRwLock};
 use tokio::time::{self, sleep, Duration};
 
 pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> anyhow::Error {
     log::error!("{}, error: {:?}", message, e);
     Error::msg("Internal server error")
 }
+
+static AUTO_UPDATE_INTERVAL: Lazy<Arc<TokioRwLock<u64>>> =
+    Lazy::new(|| Arc::new(TokioRwLock::new(1800)));
+
+static INTERVAL_CHANNEL: Lazy<(watch::Sender<u64>, watch::Receiver<u64>)> = Lazy::new(|| {
+    let (tx, rx) = watch::channel(1800);
+    (tx, rx)
+});
 
 #[allow(dead_code)]
 pub enum DownloadSeedStatus {
@@ -409,7 +418,16 @@ pub async fn create_qb_task(
         .qb_api_add_torrent(&anime_name, &anime_seed)
         .await
     {
-        Ok(_) => Ok(()),
+        Ok(_) => {
+            {
+                let mut interval = AUTO_UPDATE_INTERVAL.write().await;
+                *interval = 5;
+                log::info!("Interval set to 5 after task creation: {:?}", interval);
+                let _ = INTERVAL_CHANNEL.0.send(*interval);
+            }
+            Ok(())
+        }
+
         Err(e) => {
             log::warn!("failed to create qb task, err: {}", e);
             Err(Error::from(e))
@@ -601,24 +619,58 @@ pub async fn auto_update_rename_extract(
     qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
 ) -> Result<(), Error> {
     log::info!("Start auto rename and update thread");
+    let mut lazy_mode_cnt = 0;
+    let mut interval_rx = INTERVAL_CHANNEL.1.clone();
+
     loop {
         {
             let mut db_connection = pool.get().unwrap();
-            let nb_new_finished_task = auto_update_handler(&qb_task_executor, &mut db_connection)
-                .await
-                .map_err(|e| handle_error(e, "Failed to get finished task"))?;
 
-            if nb_new_finished_task > 0 {
-                auto_rename_and_extract_handler(
-                    &video_file_lock,
-                    &qb_task_executor,
-                    &mut db_connection,
-                )
-                .await
-                .map_err(|e| handle_error(e, "Failed to execute rename task"))?;
+            match auto_update_handler(qb_task_executor, &mut db_connection).await {
+                Ok(nb_new_finished_task) if nb_new_finished_task > 0 => {
+                    auto_rename_and_extract_handler(
+                        video_file_lock,
+                        qb_task_executor,
+                        &mut db_connection,
+                    )
+                    .await
+                    .map_err(|e| handle_error(e, "Failed to execute rename task"))?;
+                }
+                Err(e) => {
+                    handle_error(e, "Failed to get finished task");
+                }
+                _ => {}
             }
         }
-        sleep(Duration::from_secs(5)).await;
+
+        let mut interval = {
+            let read_guard = AUTO_UPDATE_INTERVAL.read().await;
+            *read_guard
+        };
+
+        // log::debug!("Current auto-update interval: {:?}", interval);
+
+        if interval == 5 {
+            lazy_mode_cnt += 1;
+            if lazy_mode_cnt >= 360 {
+                let mut write_guard = AUTO_UPDATE_INTERVAL.write().await;
+                *write_guard = 1800;
+                interval = 1800;
+                log::info!("Interval reset to 1800 due to lazy mode count reaching threshold.");
+
+                let _ = INTERVAL_CHANNEL.0.send(*write_guard);
+            }
+        } else {
+            lazy_mode_cnt = 0;
+        }
+
+        tokio::select! {
+            _ = sleep(Duration::from_secs(interval)) => {
+            },
+            _ = interval_rx.changed() => {
+                log::info!("Interval has been updated, restarting sleep.");
+            }
+        }
     }
 }
 
