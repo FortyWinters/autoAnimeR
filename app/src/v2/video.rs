@@ -332,13 +332,13 @@ async fn set_anime_progress_by_mikanid_and_episode(
     item: &ReqAnimeProgress,
     pool: web::Data<Pool>,
 ) -> Result<(), Error> {
-    let db_connection = &mut pool
+    let mut db_connection = pool
         .get()
         .map_err(|e| handle_error(e, "failed to get db connection"))?;
 
     let quary_item = item.to_anime_progress_json();
 
-    dao::anime_progress::add_with_mikan_id_and_episode(&quary_item, db_connection)
+    dao::anime_progress::add_with_mikan_id_and_episode(&quary_item, &mut db_connection)
         .await
         .map_err(|e| {
             handle_error(
@@ -350,6 +350,16 @@ async fn set_anime_progress_by_mikanid_and_episode(
                 .as_str(),
             )
         })?;
+
+    if let Err(e) =
+        dao::anime_task::update_isnew_status(&mut db_connection, &quary_item.torrent_name, 0).await
+    {
+        log::warn!(
+            "Failed to update isnew status for torrent: {}, {}",
+            quary_item.torrent_name,
+            e
+        );
+    }
     Ok(())
 }
 
@@ -374,6 +384,17 @@ async fn set_anime_progress_by_torrent(
                 .as_str(),
             )
         })?;
+
+    if let Err(e) =
+        dao::anime_task::update_isnew_status(&mut db_connection, &quary_item.torrent_name, 0).await
+    {
+        log::warn!(
+            "Failed to update isnew status for torrent: {}, {}",
+            quary_item.torrent_name,
+            e
+        );
+    }
+
     drop(db_connection);
     Ok(())
 }

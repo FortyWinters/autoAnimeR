@@ -25,6 +25,7 @@ pub async fn add(
                 qb_task_status: &item.qb_task_status,
                 rename_status: &item.rename_status,
                 filename: &item.filename,
+                is_new: &item.is_new,
             };
             insert_into(anime_task)
                 .values(&new_anime_task)
@@ -55,6 +56,7 @@ pub async fn add_bulk(
                 qb_task_status: &item.qb_task_status,
                 rename_status: &item.rename_status,
                 filename: &item.filename,
+                is_new: &item.is_new
             };
             insert_into(anime_task)
                 .values(&new_anime_task)
@@ -162,7 +164,8 @@ pub async fn update_task_status(
     item: &String, // torrent_name
     new_qb_status: i32,
     new_rename_status: i32,
-    new_file_name: &String,
+    new_filename: &String,
+    isnew: i32,
 ) -> Result<(), diesel::result::Error> {
     if let Ok(_) = anime_task
         .filter(torrent_name.like(&item))
@@ -172,7 +175,8 @@ pub async fn update_task_status(
             .set((
                 qb_task_status.eq(new_qb_status),
                 rename_status.eq(new_rename_status),
-                filename.eq(new_file_name),
+                filename.eq(new_filename),
+                is_new.eq(isnew),
             ))
             .execute(db_connection)
             .expect("save failed");
@@ -249,6 +253,26 @@ pub async fn get_by_torrent_name(
     Ok(result)
 }
 
+#[allow(dead_code)]
+pub async fn update_isnew_status(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    item: &String, // torrent_name
+    isnew: i32,
+) -> Result<(), diesel::result::Error> {
+    if let Ok(_) = anime_task
+        .filter(torrent_name.like(&item))
+        .first::<AnimeTask>(db_connection)
+    {
+        update(anime_task.filter(torrent_name.like(&item)))
+            .set((
+                is_new.eq(isnew),
+            ))
+            .execute(db_connection)
+            .expect("save failed");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -274,6 +298,7 @@ mod test {
             qb_task_status: 0,
             rename_status: 0,
             filename: "test_file_name".to_string(),
+            is_new: 0,
         };
 
         add(db_connection, &test_anime_task_json).await.unwrap();
@@ -297,6 +322,7 @@ mod test {
                 qb_task_status: 0,
                 rename_status: 0,
                 filename: "test_file_name_1".to_string(),
+                is_new: 1,
             },
             AnimeTaskJson {
                 mikan_id: 114514,
@@ -305,6 +331,7 @@ mod test {
                 qb_task_status: 0,
                 rename_status: 0,
                 filename: "test_file_name_2".to_string(),
+                is_new: 1,
             },
         ];
         add_bulk(db_connection, &test_anime_task_json)

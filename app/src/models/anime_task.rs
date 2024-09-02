@@ -9,7 +9,8 @@ pub struct AnimeTask {
     pub torrent_name: String,
     pub qb_task_status: i32,
     pub rename_status: i32,
-    pub filename: String
+    pub filename: String,
+    pub is_new: i32
 }
 
 #[derive(Debug, Insertable)]
@@ -20,7 +21,8 @@ pub struct PostAnimeTask<'a> {
     pub torrent_name: &'a str,
     pub qb_task_status: &'a i32,
     pub rename_status: &'a i32,
-    pub filename: &'a String
+    pub filename: &'a String,
+    pub is_new: &'a i32
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,5 +32,6 @@ pub struct AnimeTaskJson {
     pub torrent_name: String,
     pub qb_task_status: i32,
     pub rename_status: i32,
-    pub filename: String
+    pub filename: String,
+    pub is_new: i32
 }

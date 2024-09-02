@@ -80,7 +80,8 @@ CREATE TABLE "anime_task" (
   "torrent_name" TEXT NOT NULL,
   "qb_task_status" INTEGER NOT NULL DEFAULT NULL,
   "rename_status" INTEGER NOT NULL,
-  "filename" TEXT NOT NULL
+  "filename" TEXT NOT NULL,
+  "is_new" INTEGER NOT NULL
 );
 
 -- ----------------------------

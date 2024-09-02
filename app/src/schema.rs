@@ -78,6 +78,7 @@ diesel::table! {
         qb_task_status -> Integer,
         rename_status -> Integer,
         filename -> Text,
+        is_new -> Integer,
     }
 }
 

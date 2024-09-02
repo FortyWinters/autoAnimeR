@@ -126,6 +126,7 @@ pub async fn create_anime_task_by_seed(
                 qb_task_status: 0,
                 rename_status: 0,
                 filename: "".to_string(),
+                is_new: 0,
             };
 
             match create_qb_task(&qb_task_executor, db_connection, &anime_seed).await {
@@ -288,6 +289,7 @@ pub async fn create_anime_task_from_exist_files(
                 qb_task_status: 1,
                 rename_status: 1,
                 filename: video.clone(),
+                is_new: 0,
             };
 
             if let Err(e) = dao::anime_task::add(db_connection, &anime_task).await {
@@ -386,6 +388,7 @@ pub async fn filter_and_download(
             qb_task_status: 0,
             rename_status: 0,
             filename: "".to_string(),
+            is_new: 0,
         })
     }
 
@@ -734,6 +737,7 @@ pub async fn auto_rename_and_extract_handler(
                 1,
                 1,
                 &cur_file_name,
+                1
             )
             .await
             .map_err(|e| {
