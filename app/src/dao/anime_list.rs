@@ -31,6 +31,7 @@ pub async fn add(
                 website: &item.website,
                 anime_status: &item.anime_status,
                 total_episodes: &item.total_episodes,
+                new_finished_episode: &item.new_finished_episode,
             };
             insert_into(anime_list)
                 .values(&new_anime_list)
@@ -66,6 +67,7 @@ pub async fn add_vec(
                 website: &item.website,
                 anime_status: &item.anime_status,
                 total_episodes: &item.total_episodes,
+                new_finished_episode: &item.new_finished_episode,
             };
             insert_into(anime_list)
                 .values(&new_anime_list)
@@ -164,7 +166,7 @@ pub async fn get_mikanid_by_anime_name(
     query_anime_name: &String,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<i32, diesel::result::Error> {
-    let result = anime_list
+    let result: AnimeList = anime_list
         .filter(anime_name.eq(query_anime_name))
         .first::<AnimeList>(db_connection)?;
     Ok(result.mikan_id)
@@ -195,6 +197,28 @@ pub async fn get_by_subscribe_and_anime_status(
     Ok(result)
 }
 
+#[allow(dead_code)]
+pub async fn get_new_finished_episode_nb(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_mikanid: &i32,
+) -> Result<i32, diesel::result::Error> {
+    let result: AnimeList = anime_list
+        .filter(mikan_id.eq(query_mikanid))
+        .first::<AnimeList>(db_connection)?;
+    Ok(result.new_finished_episode)
+}
+
+#[allow(dead_code)]
+pub async fn update_new_finished_episode_nb(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    query_mikanid: &i32,
+    new_finished_episode_nb: &i32,
+) -> Result<(), diesel::result::Error> {
+    diesel::update(anime_list.filter(mikan_id.eq(query_mikanid)))
+        .set(new_finished_episode.eq(new_finished_episode_nb))
+        .execute(db_connection)?;
+    Ok(())
+}
 #[cfg(test)]
 mod test {
     use super::*;
@@ -212,22 +236,25 @@ mod test {
 
         let pool = web::Data::new(database_pool);
         let db_connection = &mut pool.get().unwrap();
-        let test_anime_seed_json = AnimeListJson {
-            mikan_id: 3143,
-            anime_name: "米奇与达利".to_string(),
-            update_day: 1,
-            img_url: "/images/Bangumi/202310/69e733eb.jpg".to_string(),
-            anime_type: 0,
-            subscribe_status: 1,
-            bangumi_id: 12,
-            bangumi_rank: "4.3".to_string(),
-            bangumi_summary: "asdasd".to_string(),
-            website: "www.baidu.com".to_string(),
-            anime_status: -1,
-            total_episodes: -1,
-        };
+        // let test_anime_seed_json = AnimeListJson {
+        //     mikan_id: 3143,
+        //     anime_name: "米奇与达利".to_string(),
+        //     update_day: 1,
+        //     img_url: "/images/Bangumi/202310/69e733eb.jpg".to_string(),
+        //     anime_type: 0,
+        //     subscribe_status: 1,
+        //     bangumi_id: 12,
+        //     bangumi_rank: "4.3".to_string(),
+        //     bangumi_summary: "asdasd".to_string(),
+        //     website: "www.baidu.com".to_string(),
+        //     anime_status: -1,
+        //     total_episodes: -1,
+        //     new_finished_episode: 0,
+        // };
 
-        let r = add(db_connection, test_anime_seed_json).await.unwrap();
+        // let r = add(db_connection, test_anime_seed_json).await.unwrap();
+
+        let r = get_new_finished_episode_nb(db_connection, &3407).await.unwrap();
         println!("{:?}", r);
     }
 }

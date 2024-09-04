@@ -34,6 +34,7 @@ diesel::table! {
         website -> Text,
         anime_status -> Integer,
         total_episodes -> Integer,
+        new_finished_episode -> Integer,
     }
 }
 

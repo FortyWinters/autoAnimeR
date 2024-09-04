@@ -369,9 +369,11 @@ async fn set_anime_progress_by_torrent(
 ) -> Result<(), Error> {
     let mut db_connection = pool
         .get()
-        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+        .map_err(|e| handle_error(e, "Failed to get DB connection"))?;
+
     let quary_item = item.to_anime_progress_json();
 
+    // Add anime progress
     dao::anime_progress::add_with_torrent_name(&quary_item, &mut db_connection)
         .await
         .map_err(|e| {
@@ -385,17 +387,57 @@ async fn set_anime_progress_by_torrent(
             )
         })?;
 
-    if let Err(e) =
-        dao::anime_task::update_isnew_status(&mut db_connection, &quary_item.torrent_name, 0).await
-    {
-        log::warn!(
-            "Failed to update isnew status for torrent: {}, {}",
-            quary_item.torrent_name,
-            e
-        );
+    let anime_task =
+        match dao::anime_task::get_by_torrent_name(&mut db_connection, &quary_item.torrent_name)
+            .await
+        {
+            Ok(task) => task,
+            Err(e) => return Err(handle_error(e, "Failed to fetch anime task")),
+        };
+
+    if anime_task.is_new >= 1 {
+        if let Err(e) =
+            dao::anime_task::update_isnew_status(&mut db_connection, &quary_item.torrent_name, 0)
+                .await
+        {
+            log::warn!(
+                "Failed to update is_new status for torrent: {}, {}",
+                quary_item.torrent_name,
+                e
+            );
+        }
+
+        if let Ok(new_finished_episode_nb) =
+            dao::anime_list::get_new_finished_episode_nb(&mut db_connection, &anime_task.mikan_id)
+                .await
+        {
+            if new_finished_episode_nb >= 1 {
+                log::info!("do update");
+                dao::anime_list::update_new_finished_episode_nb(
+                    &mut db_connection,
+                    &anime_task.mikan_id,
+                    &(new_finished_episode_nb - 1),
+                )
+                .await
+                .map_err(|e| {
+                    handle_error(
+                        e,
+                        format!(
+                            "Failed to update new_finished_episode_nb for torrent: {}",
+                            quary_item.torrent_name
+                        )
+                        .as_str(),
+                    )
+                })?;
+            }
+        } else {
+            log::error!(
+                "Failed to get new_finished_episode_nb for mikan_id: {}",
+                anime_task.mikan_id
+            );
+        }
     }
 
-    drop(db_connection);
     Ok(())
 }
 

@@ -16,6 +16,7 @@ pub struct AnimeList {
     pub website: String,
     pub anime_status: i32,   // 默认为-1, 0表示更新中, 1表示完结
     pub total_episodes: i32, // 默认为-1
+    pub new_finished_episode: i32,
 }
 
 impl Ord for AnimeList {
@@ -49,6 +50,7 @@ pub struct PostAnimeList<'a> {
     pub website: &'a str,
     pub anime_status: &'a i32,
     pub total_episodes: &'a i32,
+    pub new_finished_episode: &'a i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -65,6 +67,7 @@ pub struct AnimeListJson {
     pub website: String,
     pub anime_status: i32,
     pub total_episodes: i32,
+    pub new_finished_episode: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

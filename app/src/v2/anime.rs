@@ -292,6 +292,7 @@ async fn update_anime_broadcast(
             website: "".to_string(),
             anime_status: -1,
             total_episodes: -1,
+            new_finished_episode: 0,
         });
         anime_broadcast_json_vec.push(anime_broadcast::AnimeBroadcastJson {
             mikan_id: anime.mikan_id,

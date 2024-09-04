@@ -20,6 +20,7 @@ use serde_json;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{prelude::*, Read, Write};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::{watch, RwLock as TokioRwLock};
 use tokio::time::{self, sleep, Duration};
@@ -206,9 +207,24 @@ pub async fn create_anime_task_from_exist_files(
             }
         };
 
+        if let Ok(res) =
+            dao::anime_task::get_exist_anime_task_by_mikan_id(db_connection, mikan_id).await
+        {
+            if res.len() > 0 {
+                log::info!("skip {}", filename);
+                continue;
+            }
+        }
+
         // Update anime list
         let mikan = Mikan::new().unwrap();
-        let anime = mikan.get_anime_by_mikan_id(mikan_id).await.unwrap();
+        let anime = match mikan.get_anime_by_mikan_id(mikan_id).await {
+            Ok(res) => res,
+            Err(e) => {
+                log::warn!("Failed to get anime {}, {}", filename, e);
+                continue;
+            }
+        };
         let img_url = anime.img_url.split("?").next().unwrap().to_string();
 
         dao::anime_list::add(
@@ -226,6 +242,7 @@ pub async fn create_anime_task_from_exist_files(
                 website: "".to_string(),
                 anime_status: -1,
                 total_episodes: -1,
+                new_finished_episode: 0,
             },
         )
         .await?;
@@ -737,7 +754,7 @@ pub async fn auto_rename_and_extract_handler(
                 1,
                 1,
                 &cur_file_name,
-                1
+                1,
             )
             .await
             .map_err(|e| {
@@ -747,16 +764,52 @@ pub async fn auto_rename_and_extract_handler(
                 )
             })?;
 
+            let new_finished_episode_nb =
+                dao::anime_list::get_new_finished_episode_nb(db_connection, &task.mikan_id)
+                    .await
+                    .map_err(|e| {
+                        handle_error(
+                            e,
+                            format!(
+                                "Failed to get new_finished_episode_nb for anime_task: {:?}",
+                                task
+                            )
+                            .as_str(),
+                        )
+                    })?;
+
+            dao::anime_list::update_new_finished_episode_nb(
+                db_connection,
+                &task.mikan_id,
+                &(new_finished_episode_nb + 1),
+            )
+            .await
+            .map_err(|e| {
+                handle_error(
+                    e,
+                    format!(
+                        "Failed to get new_finished_episode_nb for anime_task: {:?}",
+                        task
+                    )
+                    .as_str(),
+                )
+            })?;
+
             // extract subtitles
-            let mut subtitle_vec: Vec<String> = vec![];
-            let extension = cur_file_name.split(".").last().unwrap();
-            if extension == "mkv" || extension == "mp4" {
-                if let Ok(res) = video_proccessor::extract_subtitle(&cur_total_file_path).await {
-                    subtitle_vec = res;
+            let subtitle_vec = if let Some(extension) = Path::new(&cur_file_name).extension() {
+                if extension == "mkv" || extension == "mp4" {
+                    video_proccessor::extract_subtitle(&cur_total_file_path)
+                        .await
+                        .unwrap_or_else(|_| {
+                            log::warn!("Failed to extract subtitles for {:?}", cur_file_name);
+                            vec![]
+                        })
                 } else {
-                    log::warn!("");
+                    vec![]
                 }
-            }
+            } else {
+                vec![]
+            };
 
             // write VideoConfig
             let cur_config = VideoConfig {
