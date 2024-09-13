@@ -7,7 +7,7 @@ use ffmpeg::{
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::ffi::{av_hwdevice_get_type_name, av_hwdevice_iterate_types, AVHWDeviceType};
 use regex::Regex;
-use rsubs_lib::{ssa, vtt};
+use rsubs_lib::{srt, ssa, vtt};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::ffi::CStr;
@@ -70,6 +70,7 @@ pub async fn extract_subtitle(path: &String) -> Result<Vec<String>, Error> {
         let subtitle_extension = match subtitle.format.as_str() {
             "ass" => "ass",
             "srt" => "srt",
+            "subrip" => "srt",
             _ => "ass",
         };
 
@@ -155,9 +156,22 @@ pub async fn trans_subtitle_to_vtt(
     intput_file: &String,
     output_file: &String,
 ) -> Result<(), Error> {
-    vtt::VTTFile::from(ssa::parse(intput_file.to_string()).unwrap())
-        .to_file(output_file)
-        .unwrap();
+    match intput_file.split(".").last().unwrap() {
+        "ass" => {
+            vtt::VTTFile::from(ssa::parse(intput_file.to_string()).unwrap())
+                .to_file(output_file)
+                .unwrap();
+        }
+        "srt" => {
+            vtt::VTTFile::from(srt::parse(intput_file.to_string()).unwrap())
+                .to_file(output_file)
+                .unwrap();
+        }
+        _ => {
+            log::warn!("Only support format ass and srt now.")
+        }
+    }
+
     Ok(())
 }
 
@@ -697,8 +711,8 @@ mod test {
     #[tokio::test]
     pub async fn test() {
         let input_file =
-            "downloads/狼与香辛料 行商邂逅贤狼(3330)/狼与香辛料 行商邂逅贤狼 - 1 - LoliHouse.mkv"
+            "downloads/【我推的孩子】 第二季(3407)/【我推的孩子】 第二季 - 16 - LoliHouse.mkv"
                 .to_string();
-        let _t = trans_mkv_2_mp4(&input_file).await.unwrap();
+        let _t = extract_subtitle(&input_file).await.unwrap();
     }
 }

@@ -27,7 +27,7 @@ use tokio::time::{self, sleep, Duration};
 
 pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> anyhow::Error {
     log::error!("{}, error: {:?}", message, e);
-    Error::msg("Internal server error")
+    Error::msg(format!("{:?}", e))
 }
 
 static AUTO_UPDATE_INTERVAL: Lazy<Arc<TokioRwLock<u64>>> =
