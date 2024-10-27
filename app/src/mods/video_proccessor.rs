@@ -411,32 +411,31 @@ pub fn get_av_hwaccels() -> Result<Vec<String>, Error> {
 */
 
 #[allow(dead_code)]
-pub fn trans_hwaccels_2_codec_name(av_codec_vec: Vec<String>) -> String {
+pub fn trans_hwaccels_2_codec_name(av_codec_vec: Vec<String>, is_h265: bool) -> String {
     let os_name = std::env::consts::OS;
+    let codec_suffix = if is_h265 { "hevc" } else { "h264" };
 
-    let codec_name = match os_name {
-        "macos" => {
-            if av_codec_vec.contains(&"videotoolbox".to_string()) {
-                "h264_videotoolbox"
-            } else {
-                "h264"
-            }
-        }
-        "windows" | "linux" => {
-            if av_codec_vec.contains(&"cuda".to_string()) {
-                "h264_nvenc"
-            } else if av_codec_vec.contains(&"qsv".to_string()) {
-                "h264_qsv"
-            } else if av_codec_vec.contains(&"vaapi".to_string()) {
-                "h264_vaapi"
-            } else {
-                "h264"
-            }
-        }
-        _ => "h264",
-    };
+    // 定义硬件加速器到编码器名称的映射
+    let encoder_map = vec![
+        ("videotoolbox", format!("{}_videotoolbox", codec_suffix)),
+        ("cuda", format!("{}_nvenc", codec_suffix)),
+        ("qsv", format!("{}_qsv", codec_suffix)),
+        ("vaapi", format!("{}_vaapi", codec_suffix)),
+    ];
 
-    codec_name.to_string()
+    // 根据系统类型和硬件加速器选择合适的编码器
+    match os_name {
+        "macos" | "windows" | "linux" => {
+            // 查找第一个匹配的硬件加速器
+            for (accel, encoder_name) in encoder_map {
+                if av_codec_vec.contains(&accel.to_string()) {
+                    return encoder_name;
+                }
+            }
+            codec_suffix.to_string() // 默认返回 "h264" 或 "hevc"
+        }
+        _ => codec_suffix.to_string(), // 其他系统返回默认编码器
+    }
 }
 
 struct Transcoder {
@@ -449,6 +448,7 @@ struct Transcoder {
     last_log_frame_count: usize,
     starting_time: Instant,
     last_log_time: Instant,
+    durations: f64,
 }
 
 impl Transcoder {
@@ -458,27 +458,38 @@ impl Transcoder {
         ost_index: usize,
         x264_opts: Dictionary,
         enable_logging: bool,
+        use_h265: bool,
+        durations: f64,
     ) -> Result<Self, ffmpeg::Error> {
         let global_header = octx.format().flags().contains(format::Flags::GLOBAL_HEADER);
         let decoder = ffmpeg::codec::context::Context::from_parameters(ist.parameters())?
             .decoder()
             .video()?;
 
-        let codec = match get_av_hwaccels() {
+        let codec_name = match get_av_hwaccels() {
             Ok(av_codec_vec) if !av_codec_vec.is_empty() => {
-                let codec_name = trans_hwaccels_2_codec_name(av_codec_vec);
-                if codec_name == "h264" {
-                    log::info!("Does not support hardware accelerated decoding, uses CPU decoding");
-                    encoder::find(codec::Id::H264)
-                } else {
-                    log::info!("Use hardware decoder [{}] to speed up decoding", codec_name);
-                    encoder::find_by_name(&codec_name)
-                }
+                trans_hwaccels_2_codec_name(av_codec_vec, use_h265)
             }
             _ => {
-                log::info!("Does not support hardware accelerated decoding, uses CPU decoding");
-                encoder::find(codec::Id::H264)
+                if use_h265 {
+                    "hevc".to_string()
+                } else {
+                    "h264".to_string()
+                }
             }
+        };
+
+        // 查找对应的编码器
+        let codec = if codec_name.starts_with("h264") || codec_name.starts_with("hevc") {
+            log::info!("Use hardware decoder [{}] to speed up decoding", codec_name);
+            encoder::find_by_name(&codec_name)
+        } else {
+            log::info!("Does not support hardware accelerated decoding, uses CPU decoding");
+            encoder::find(if use_h265 {
+                codec::Id::HEVC
+            } else {
+                codec::Id::H264
+            })
         };
 
         let mut ost = octx.add_stream(codec)?;
@@ -514,6 +525,7 @@ impl Transcoder {
             last_log_frame_count: 0,
             starting_time: Instant::now(),
             last_log_time: Instant::now(),
+            durations: durations,
         })
     }
 
@@ -598,10 +610,10 @@ impl Transcoder {
             return;
         }
         log::info!(
-            "time elpased: \t{:8.2}\tframe count: {:8}\ttimestamp: {:8.2}",
+            "time elpased: \t{:8.2}\tframe count: {:8}\tprocess: {:8.2}%",
             self.starting_time.elapsed().as_secs_f64(),
             self.frame_count,
-            timestamp
+            timestamp / self.durations * 100.00
         );
 
         self.last_log_frame_count = self.frame_count;
@@ -631,6 +643,7 @@ pub async fn trans_mkv_2_mp4(input_file: &String) -> Result<(), Error> {
     let mut ost_time_bases = vec![Rational(0, 0); ictx.nb_streams() as _];
     let mut transcoders = HashMap::new();
     let mut ost_index = 0;
+    let durations = ictx.duration() as f64 / f64::from(ffmpeg::ffi::AV_TIME_BASE);
 
     for (ist_index, ist) in ictx.streams().enumerate() {
         let ist_medium = ist.parameters().medium();
@@ -649,6 +662,8 @@ pub async fn trans_mkv_2_mp4(input_file: &String) -> Result<(), Error> {
                     ost_index as _,
                     x264_opts.to_owned(),
                     Some(ist_index) == best_video_stream_index,
+                    false,
+                    durations,
                 )
                 .unwrap(),
             );
@@ -711,8 +726,8 @@ mod test {
     #[tokio::test]
     pub async fn test() {
         let input_file =
-            "downloads/【我推的孩子】 第二季(3407)/【我推的孩子】 第二季 - 16 - LoliHouse.mkv"
+            "downloads/【我推的孩子】 第二季(3407)/【我推的孩子】 第二季 - 24 - LoliHouse.mkv"
                 .to_string();
-        let _t = extract_subtitle(&input_file).await.unwrap();
+        let _t = trans_mkv_2_mp4(&input_file).await.unwrap();
     }
 }

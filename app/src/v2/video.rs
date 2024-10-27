@@ -445,8 +445,8 @@ async fn set_anime_progress_by_torrent(
 async fn check_hw_accels_handler() -> Result<HttpResponse, Error> {
     match get_av_hwaccels() {
         Ok(res) => {
-            let codec_name = video_proccessor::trans_hwaccels_2_codec_name(res);
-            if codec_name != "h264" {
+            let codec_name = video_proccessor::trans_hwaccels_2_codec_name(res, true);
+            if codec_name != "h264" && codec_name != "hevc" {
                 Ok(HttpResponse::Ok().json(codec_name))
             } else {
                 Ok(HttpResponse::Ok().json(""))
