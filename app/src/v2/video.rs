@@ -1,15 +1,16 @@
 use crate::api::do_anime_task::{self, VideoConfig};
 use crate::models::anime_progess::AnimeProgressJson;
+use crate::models::anime_task::UpdateAnimeTask;
 use crate::mods::config::Config;
 use crate::mods::qb_api::QbitTaskExecutor;
 use crate::mods::video_proccessor::{self, get_av_hwaccels, trans_mkv_2_mp4};
-use crate::{api, dao, Pool};
+use crate::{dao, Pool};
 use actix_web::{get, post, web, Error, HttpResponse};
 use anyhow::Result;
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::SqliteConnection;
 use serde::{Deserialize, Serialize};
-use std::io::{Seek, Write};
+use std::io::{Seek, SeekFrom, Write};
 use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
 
@@ -464,6 +465,7 @@ async fn trans_video_format_handler(
     item: web::Json<TorrentName>,
     pool: web::Data<Pool>,
     config: web::Data<Arc<TokioRwLock<Config>>>,
+    video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
 ) -> Result<HttpResponse, Error> {
     let download_path = {
         let config = config.read().await;
@@ -474,33 +476,87 @@ async fn trans_video_format_handler(
         .get()
         .map_err(|e| handle_error(e, "Failed to get DB connection"))?;
 
-    let path = api::do_anime_task::get_filepath_by_torrent_name(
-        &item.torrent_name,
-        &download_path,
-        &mut db_connection,
-    )
-    .await
-    .map_err(|e| {
-        handle_error(
-            e,
-            &format!(
-                "failed to get filepath by torrent_name: {}",
-                item.torrent_name
-            ),
-        )
-    })?;
+    let anime_task = dao::anime_task::get_by_torrent_name(&mut db_connection, &item.torrent_name)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                &format!(
+                    "Failed to get anime_task by torrent_name: [{}]",
+                    &item.torrent_name
+                ),
+            )
+        })?;
 
-    drop(db_connection);
+    let anime_name = dao::anime_list::get_by_mikanid(&mut db_connection, anime_task.mikan_id)
+        .await
+        .map_err(|e| {
+            handle_error(
+                e,
+                &format!(
+                    "Failed to get anime_list by torrent_name: [{}]",
+                    &item.torrent_name
+                ),
+            )
+        })?
+        .anime_name;
 
-    tokio::spawn(async move {
-        match trans_mkv_2_mp4(&path).await {
-            Ok(_) => log::info!("Successfully converted video: {}", path),
-            Err(e) => log::error!("Failed to convert video: {}, Err: {}", path, e),
+    let path = format!(
+        "{}/{}({})/{}",
+        download_path, anime_name, anime_task.mikan_id, anime_task.filename
+    );
+
+    match trans_mkv_2_mp4(&path).await {
+        Ok(_) => {
+            log::info!("Successfully converted video: {}", path);
+            let new_filename = anime_task.filename.split(".").next().unwrap().to_string() + ".mp4";
+            dao::anime_task::update_anime_task(
+                &mut db_connection,
+                &anime_task.torrent_name,
+                UpdateAnimeTask {
+                    mikan_id: None,
+                    episode: None,
+                    qb_task_status: None,
+                    rename_status: None,
+                    filename: Some(new_filename.clone()),
+                    is_new: None,
+                },
+            )
+            .await
+            .unwrap();
+
+            {
+                let _ = video_file_lock.write().await;
+                let (mut file, mut video_config) = do_anime_task::get_video_config(&download_path)
+                    .await
+                    .map_err(|e| handle_error(e, "Failed to get video config"))?;
+
+                if let Some(cur_config) = video_config.remove(&anime_task.filename) {
+                    video_config.insert(new_filename.to_string(), cur_config);
+
+                    file.seek(SeekFrom::Start(0))
+                        .map_err(|e| handle_error(e, "Failed to seek in video config file"))?;
+                    file.set_len(0)
+                        .map_err(|e| handle_error(e, "Failed to truncate video config file"))?;
+
+                    let new_content = serde_json::to_string_pretty(&video_config)
+                        .map_err(|e| handle_error(e, "Failed to serialize video config"))?;
+                    file.write_all(new_content.as_bytes())
+                        .map_err(|e| handle_error(e, "Failed to write video config file"))?;
+                } else {
+                    return Err(handle_error(
+                        std::io::Error::new(std::io::ErrorKind::NotFound, "Torrent name not found"),
+                        "Torrent name not found in video config",
+                    ));
+                }
+            }
         }
-    });
+        Err(e) => log::error!("Failed to convert video: {}, Err: {}", path, e),
+    }
 
     Ok(HttpResponse::Ok().json("Video conversion started"))
 }
+
 #[cfg(test)]
 mod test {
     use super::*;

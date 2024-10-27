@@ -944,6 +944,7 @@ pub async fn add_default_filter(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn get_filepath_by_torrent_name(
     torrent_name: &String,
     download_path: &String,

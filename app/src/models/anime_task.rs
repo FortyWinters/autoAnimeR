@@ -35,3 +35,14 @@ pub struct AnimeTaskJson {
     pub filename: String,
     pub is_new: i32
 }
+
+#[derive(AsChangeset, Default)]
+#[diesel(table_name = anime_task)]
+pub struct UpdateAnimeTask {
+    pub mikan_id: Option<i32>,
+    pub episode: Option<i32>,
+    pub qb_task_status: Option<i32>,
+    pub rename_status: Option<i32>,
+    pub filename: Option<String>,
+    pub is_new: Option<i32>,
+}

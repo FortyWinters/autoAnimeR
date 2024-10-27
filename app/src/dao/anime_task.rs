@@ -37,6 +37,20 @@ pub async fn add(
     }
 }
 
+pub async fn update_anime_task(
+    db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    torrent_name_val: &String,
+    update_data: UpdateAnimeTask,
+) -> Result<AnimeTask, diesel::result::Error> {
+    let target = anime_task.filter(torrent_name.eq(torrent_name_val));
+    diesel::update(target)
+        .set(&update_data)
+        .execute(db_connection)?;
+
+    let result = anime_task.filter(torrent_name.eq(torrent_name_val)).first(db_connection)?;
+    Ok(result)
+}
+
 #[allow(dead_code)]
 pub async fn add_bulk(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
@@ -56,7 +70,7 @@ pub async fn add_bulk(
                 qb_task_status: &item.qb_task_status,
                 rename_status: &item.rename_status,
                 filename: &item.filename,
-                is_new: &item.is_new
+                is_new: &item.is_new,
             };
             insert_into(anime_task)
                 .values(&new_anime_task)
@@ -264,9 +278,7 @@ pub async fn update_isnew_status(
         .first::<AnimeTask>(db_connection)
     {
         update(anime_task.filter(torrent_name.like(&item)))
-            .set((
-                is_new.eq(isnew),
-            ))
+            .set((is_new.eq(isnew),))
             .execute(db_connection)
             .expect("save failed");
     }
