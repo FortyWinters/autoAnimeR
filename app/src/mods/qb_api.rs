@@ -171,7 +171,7 @@ impl QbitTaskExecutor {
 
     pub async fn qb_api_torrent_info(
         &self,
-        torrent_name: &String,
+        torrent_name: &str,
     ) -> Result<TorrentInfo, AnimeError> {
         if !self.is_login {
             return Err(AnimeError::new(
@@ -212,7 +212,7 @@ impl QbitTaskExecutor {
 
     pub async fn qb_api_add_torrent(
         &self,
-        anime_name: &String,
+        anime_name: &str,
         anime_seed_info: &AnimeSeed,
     ) -> Result<(), AnimeError> {
         if !self.is_login {
@@ -233,7 +233,7 @@ impl QbitTaskExecutor {
 
         let seed_path = format!("downloads/seed/{}/{}", anime_seed_info.mikan_id, file_name);
         let file_byte = std::fs::read(seed_path).unwrap();
-        let save_path = anime_name.clone() + "(" + &anime_seed_info.mikan_id.to_string() + ")";
+        let save_path = anime_name.to_string() + "(" + &anime_seed_info.mikan_id.to_string() + ")";
         let form = Form::new()
             .part("torrent", Part::bytes(file_byte).file_name(file_name))
             .text("savepath", save_path);
@@ -253,7 +253,7 @@ impl QbitTaskExecutor {
         Ok(())
     }
 
-    pub async fn qb_api_del_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
+    pub async fn qb_api_del_torrent(&self, torrent_name: &str) -> Result<(), AnimeError> {
         if !self.is_login {
             return Err(AnimeError::new(
                 "[QB API] qbittorrent client not started".to_string(),
@@ -280,8 +280,8 @@ impl QbitTaskExecutor {
 
     pub async fn qb_api_torrent_rename_file(
         &self,
-        anime_name: &String,
-        subgroup_name: &String,
+        anime_name: &str,
+        subgroup_name: &str,
         anime_seed_info: &AnimeSeed,
     ) -> Result<(), AnimeError> {
         if !self.is_login {
@@ -344,7 +344,7 @@ impl QbitTaskExecutor {
         Ok(())
     }
 
-    pub async fn qb_api_resume_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
+    pub async fn qb_api_resume_torrent(&self, torrent_name: &str) -> Result<(), AnimeError> {
         if !self.is_login {
             return Err(AnimeError::new(
                 "[QB API] qbittorrent client not started".to_string(),
@@ -369,7 +369,7 @@ impl QbitTaskExecutor {
         Ok(())
     }
 
-    pub async fn qb_api_pause_torrent(&self, torrent_name: &String) -> Result<(), AnimeError> {
+    pub async fn qb_api_pause_torrent(&self, torrent_name: &str) -> Result<(), AnimeError> {
         if !self.is_login {
             return Err(AnimeError::new(
                 "[QB API] qbittorrent client not started".to_string(),

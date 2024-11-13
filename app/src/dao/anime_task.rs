@@ -39,7 +39,7 @@ pub async fn add(
 
 pub async fn update_anime_task(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    torrent_name_val: &String,
+    torrent_name_val: &str,
     update_data: UpdateAnimeTask,
 ) -> Result<AnimeTask, diesel::result::Error> {
     let target = anime_task.filter(torrent_name.eq(torrent_name_val));
@@ -124,7 +124,7 @@ pub async fn delete_anime_task_by_mikan_id(
 #[allow(dead_code)]
 pub async fn delete_anime_task_by_torrent_name(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    item: &String, // torrent_name
+    item: &str, // torrent_name
 ) -> Result<(), diesel::result::Error> {
     let _r = delete(anime_task.filter(torrent_name.like(&item)))
         .execute(db_connection)
@@ -175,10 +175,10 @@ pub async fn update_qb_task_status(
 #[allow(dead_code)]
 pub async fn update_task_status(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    item: &String, // torrent_name
+    item: &str, // torrent_name
     new_qb_status: i32,
     new_rename_status: i32,
-    new_filename: &String,
+    new_filename: &str,
     isnew: i32,
 ) -> Result<(), diesel::result::Error> {
     if let Ok(_) = anime_task
@@ -259,7 +259,7 @@ pub async fn get_by_task_status(
 #[allow(dead_code)]
 pub async fn get_by_torrent_name(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    query_torrent_name: &String,
+    query_torrent_name: &str,
 ) -> Result<AnimeTask, diesel::result::Error> {
     let result: AnimeTask = anime_task
         .filter(torrent_name.eq(&query_torrent_name))
@@ -270,7 +270,7 @@ pub async fn get_by_torrent_name(
 #[allow(dead_code)]
 pub async fn update_isnew_status(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    item: &String, // torrent_name
+    item: &str, // torrent_name
     isnew: i32,
 ) -> Result<(), diesel::result::Error> {
     if let Ok(_) = anime_task

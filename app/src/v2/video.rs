@@ -49,7 +49,7 @@ pub async fn get_video_detail_handler(
 }
 
 async fn get_anime_detail(
-    torrent_name: &String,
+    torrent_name: &str,
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
     qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
@@ -97,7 +97,7 @@ async fn get_anime_detail(
 }
 
 async fn get_subtitle_vec(
-    video_name: &String,
+    video_name: &str,
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
     qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
 ) -> Result<Vec<String>, Error> {
@@ -137,7 +137,7 @@ pub async fn extract_subtitle_handle(
 }
 
 pub async fn extract_subtitle(
-    torrent_name: &String,
+    torrent_name: &str,
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
     qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
@@ -258,7 +258,7 @@ pub async fn get_anime_progress_handler(
 }
 
 async fn get_anime_progress_by_mikanid_and_episode(
-    progress_id: &String,
+    progress_id: &str,
     mikan_id: &i32,
     episode: &i32,
     pool: web::Data<Pool>,
@@ -290,8 +290,8 @@ async fn get_anime_progress_by_mikanid_and_episode(
 }
 
 async fn get_anime_progress_by_torrent(
-    progress_id: &String,
-    torrent_name: &String,
+    progress_id: &str,
+    torrent_name: &str,
     pool: web::Data<Pool>,
 ) -> Result<i32, Error> {
     let db_connection = &mut pool

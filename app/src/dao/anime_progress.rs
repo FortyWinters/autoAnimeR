@@ -71,7 +71,7 @@ pub async fn add_with_torrent_name(
 
 #[allow(dead_code)]
 pub async fn get_by_mikan_id_and_episode(
-    query_progress_id: &String,
+    query_progress_id: &str,
     query_mikan_id: &i32,
     query_episode: &i32,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
@@ -89,8 +89,8 @@ pub async fn get_by_mikan_id_and_episode(
 
 #[allow(dead_code)]
 pub async fn get_by_torrent_name(
-    query_progress_id: &String,
-    query_torrent_name: &String,
+    query_progress_id: &str,
+    query_torrent_name: &str,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<AnimeProgress, diesel::result::Error> {
     match anime_progress
@@ -105,7 +105,7 @@ pub async fn get_by_torrent_name(
 
 #[allow(dead_code)]
 pub async fn delete_by_progress_id(
-    query_progress_id: &String,
+    query_progress_id: &str,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<(), diesel::result::Error> {
     delete(anime_progress.filter(progress_id.eq(&query_progress_id)))
@@ -116,7 +116,7 @@ pub async fn delete_by_progress_id(
 
 #[allow(dead_code)]
 pub async fn delete_by_mikan_id_and_episode(
-    query_progress_id: &String,
+    query_progress_id: &str,
     query_mikan_id: &i32,
     query_episode: &i32,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
@@ -134,8 +134,8 @@ pub async fn delete_by_mikan_id_and_episode(
 
 #[allow(dead_code)]
 pub async fn delete_by_torrent_name(
-    query_progress_id: &String,
-    query_torrent_name: &String,
+    query_progress_id: &str,
+    query_torrent_name: &str,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<(), diesel::result::Error> {
     delete(

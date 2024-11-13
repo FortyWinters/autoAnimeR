@@ -145,7 +145,7 @@ pub async fn create_anime_task_by_seed(
 }
 
 pub async fn get_video_config(
-    download_path: &String,
+    download_path: &str,
 ) -> Result<(File, HashMap<String, VideoConfig>), Error> {
     let video_config_path = format!("{}/.videoConfig.json", download_path);
 
@@ -647,7 +647,7 @@ pub async fn auto_update_rename_extract(
             let mut db_connection = pool.get().unwrap();
 
             match auto_update_handler(qb_task_executor, &mut db_connection).await {
-                Ok(nb_new_finished_task) if nb_new_finished_task > 0 => {
+                Ok(nb_new_finished_task) if nb_new_finished_task >= 0 => {
                     auto_rename_and_extract_handler(
                         video_file_lock,
                         qb_task_executor,
@@ -719,6 +719,17 @@ pub async fn auto_update_handler(
             log::info!("update torrent: {} download status", task.torrent_name);
         }
     }
+
+    // let a = under_update_task_list
+    //     .iter()
+    //     .filter(|task| finished_task_set.contains(&task.torrent_name))
+    //     .map(|task| async {
+    //         dao::anime_task::update_qb_task_status(db_connection, task.torrent_name.to_string())
+    //             .await
+    //             .map_err(|e| handle_error(e, "failed to access anime_task table"))?;
+    //         log::info!("update torrent: {} download status", task.torrent_name);
+    //     });
+
     Ok(task_cnt)
 }
 
@@ -946,8 +957,8 @@ pub async fn add_default_filter(
 
 #[allow(dead_code)]
 pub async fn get_filepath_by_torrent_name(
-    torrent_name: &String,
-    download_path: &String,
+    torrent_name: &str,
+    download_path: &str,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<String, Error> {
     let anime_task = dao::anime_task::get_by_torrent_name(db_connection, &torrent_name)

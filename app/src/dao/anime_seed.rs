@@ -112,7 +112,7 @@ pub async fn add_bulk_with_response(
 #[allow(dead_code)]
 pub async fn update_anime_seed_status(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    item: &String, // seed_url
+    item: &str, // seed_url
 ) -> Result<(), diesel::result::Error> {
     diesel::update(anime_seed.filter(seed_url.like(format!("%{}%", item))))
         .set(seed_status.eq(1))
@@ -123,7 +123,7 @@ pub async fn update_anime_seed_status(
 
 pub async fn update_seedstatus_by_seedurl(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    query_seedurl: &String,
+    query_seedurl: &str,
     update_seedstatus: i32,
 ) -> Result<(), diesel::result::Error> {
     diesel::update(anime_seed.filter(seed_url.eq(query_seedurl)))
@@ -135,7 +135,7 @@ pub async fn update_seedstatus_by_seedurl(
 #[allow(dead_code)]
 pub async fn update_seedstatus_by_seedurl_with_response(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    query_seedurl: &String,
+    query_seedurl: &str,
     update_seedstatus: i32,
 ) -> Result<DaoResponse<AnimeSeed>, diesel::result::Error> {
     let mut success_vec: Vec<AnimeSeed> = Vec::new();
@@ -155,7 +155,7 @@ pub async fn update_seedstatus_by_seedurl_with_response(
                 subgroup_id: 0,
                 episode: 0,
                 seed_name: "".to_string(),
-                seed_url: query_seedurl.clone(),
+                seed_url: query_seedurl.to_string(),
                 seed_status: -1,
                 seed_size: "".to_string(),
             });
@@ -208,7 +208,7 @@ pub async fn get_anime_seed_by_mikan_id(
 #[allow(dead_code)]
 pub async fn get_anime_seed_by_seed_url(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    item: &String, // seed_url
+    item: &str, // seed_url
 ) -> Result<AnimeSeed, diesel::result::Error> {
     match anime_seed
         .filter(seed_url.like(format!("%{}%", item)))

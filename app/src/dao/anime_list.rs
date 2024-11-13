@@ -163,7 +163,7 @@ pub async fn del_by_mikan_id(
 
 #[allow(dead_code)]
 pub async fn get_mikanid_by_anime_name(
-    query_anime_name: &String,
+    query_anime_name: &str,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<i32, diesel::result::Error> {
     let result: AnimeList = anime_list
@@ -175,7 +175,7 @@ pub async fn get_mikanid_by_anime_name(
 #[allow(dead_code)]
 pub async fn search_by_anime_name(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    query_keyword: &String,
+    query_keyword: &str,
 ) -> Result<Vec<AnimeList>, diesel::result::Error> {
     let pattern = format!("%{}%", query_keyword);
     let results = anime_list

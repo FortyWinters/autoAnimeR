@@ -24,7 +24,7 @@ pub struct SubtitleInfo {
 }
 
 #[allow(dead_code)]
-pub async fn get_subtitle_info(path: &String) -> Result<Vec<SubtitleInfo>, Error> {
+pub async fn get_subtitle_info(path: &str) -> Result<Vec<SubtitleInfo>, Error> {
     ffmpeg::init().unwrap();
 
     let ictx = format::input(path).map_err(|e| handle_error(e, "Failed to get subtitle info"))?;
@@ -52,7 +52,7 @@ pub async fn get_subtitle_info(path: &String) -> Result<Vec<SubtitleInfo>, Error
 }
 
 #[allow(dead_code)]
-pub async fn extract_subtitle(path: &String) -> Result<Vec<String>, Error> {
+pub async fn extract_subtitle(path: &str) -> Result<Vec<String>, Error> {
     let subtitle_vec = get_subtitle_info(&path)
         .await
         .map_err(|e| handle_error(e, "Failed to get subtitle info"))?;
@@ -113,8 +113,8 @@ pub async fn extract_subtitle(path: &String) -> Result<Vec<String>, Error> {
 #[allow(dead_code)]
 async fn extract_mkv_subtitle(
     subtitle_stream_index: usize,
-    input_file: &String,
-    output_file: &String,
+    input_file: &str,
+    output_file: &str,
 ) -> Result<(), Error> {
     ffmpeg::init().unwrap();
 
@@ -153,8 +153,8 @@ async fn extract_mkv_subtitle(
 
 #[allow(dead_code)]
 pub async fn trans_subtitle_to_vtt(
-    intput_file: &String,
-    output_file: &String,
+    intput_file: &str,
+    output_file: &str,
 ) -> Result<(), Error> {
     match intput_file.split(".").last().unwrap() {
         "ass" => {
@@ -178,8 +178,8 @@ pub async fn trans_subtitle_to_vtt(
 #[allow(dead_code)]
 pub async fn extract_mp4_subtitle(
     subtitle_stream_index: usize,
-    input_file: &String,
-    output_file: &String,
+    input_file: &str,
+    output_file: &str,
 ) -> Result<(), Error> {
     ffmpeg::init().unwrap();
 
@@ -319,7 +319,7 @@ fn add_basic_subtitle_info(mut file: &fs::File, config: &SubtitleConfig) -> Resu
 }
 
 #[allow(dead_code)]
-pub async fn strip_srt_tags_from_vtt(path: &String) -> Result<(), Error> {
+pub async fn strip_srt_tags_from_vtt(path: &str) -> Result<(), Error> {
     let lines: Vec<String> = read_lines(&path)?.filter_map(Result::ok).collect();
 
     let html_tag_pattern = Regex::new(r"<.*?>").unwrap();
@@ -622,7 +622,7 @@ impl Transcoder {
 }
 
 #[allow(dead_code)]
-pub async fn trans_mkv_2_mp4(input_file: &String) -> Result<(), Error> {
+pub async fn trans_mkv_2_mp4(input_file: &str) -> Result<(), Error> {
     ffmpeg::init().unwrap();
     let output_file = format!("{}.mp4", input_file.split(".").next().unwrap());
 
