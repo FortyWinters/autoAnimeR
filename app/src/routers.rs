@@ -5,7 +5,6 @@ pub fn anime_routes_v2(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/v2/anime")
             .service(get_anime_home_handler)
-            .service(get_anime_info_handler)
             .service(subscribe_anime_handler)
             .service(get_anime_broadcast_handler)
             .service(update_anime_broadcast_handler)
@@ -18,7 +17,7 @@ pub fn anime_routes_v2(cfg: &mut web::ServiceConfig) {
             .service(get_anime_detail_handler)
             .service(task_delete_handler)
             .service(task_update_handler)
-            .service(search_anime_handler)
+            .service(search_anime_handler),
     );
 }
 
@@ -33,7 +32,7 @@ pub fn setting_routes_v2(cfg: &mut web::ServiceConfig) {
             .service(reload_task_handler)
             .service(relogin_qb_handler)
             .service(modify_config_handler)
-            .service(get_config_handler)
+            .service(get_config_handler),
     );
 }
 
@@ -51,6 +50,6 @@ pub fn video_routes_v2(cfg: &mut web::ServiceConfig) {
             .service(get_anime_progress_handler)
             .service(set_anime_progress_handler)
             .service(check_hw_accels_handler)
-            .service(trans_video_format_handler)
+            .service(trans_video_format_handler),
     );
 }

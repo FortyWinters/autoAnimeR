@@ -4,7 +4,7 @@ use crate::models::anime_seed::AnimeSeed;
 use crate::models::anime_task::{AnimeTask, AnimeTaskJson};
 use crate::mods::config::Config;
 use crate::mods::{anime_filter, qb_api::QbitTaskExecutor, spider::Mikan, video_proccessor};
-use crate::v2::anime::AnimeRequestJson;
+use crate::v2::anime::AnimeMikanIdReqJson;
 use crate::{dao, v2};
 
 use anyhow::Error;
@@ -255,7 +255,7 @@ pub async fn create_anime_task_from_exist_files(
         mikan.download_img(&img_url, &save_path).await.unwrap();
 
         // Update anime seed
-        if v2::anime::seed_update(db_connection, AnimeRequestJson { mikan_id })
+        if v2::anime::seed_update(db_connection, AnimeMikanIdReqJson { mikan_id })
             .await
             .is_err()
         {
@@ -263,7 +263,7 @@ pub async fn create_anime_task_from_exist_files(
                 "Failed to update seed for anime: {}, retrying once.",
                 anime.anime_name
             );
-            if v2::anime::seed_update(db_connection, AnimeRequestJson { mikan_id })
+            if v2::anime::seed_update(db_connection, AnimeMikanIdReqJson { mikan_id })
                 .await
                 .is_err()
             {
