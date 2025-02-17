@@ -6,6 +6,7 @@ use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
 use mods::{config::Config, qb_api::QbitTaskExecutor};
 use routers::*;
+use std::fs;
 
 mod api;
 mod dao;
@@ -69,14 +70,14 @@ async fn main() -> std::io::Result<()> {
     let video_file_lock_for_task = Arc::clone(&video_file_lock);
     let database_pool_for_task = database_pool.clone();
 
-    tokio::spawn(async move {
-        let _ = do_anime_task::auto_update_rename_extract(
-            &video_file_lock_for_task,
-            &database_pool_for_task,
-            &qb_for_task
-        )
-        .await;
-    });
+    fs::create_dir_all(&download_path).expect("Failed to create download directory");
+
+    let file_server = HttpServer::new(move || {
+        let path = download_path.clone();
+        App::new().service(Files::new("/", path).show_files_listing())
+    })
+    .bind(("0.0.0.0", 9999))?
+    .run();
 
     let http_server = HttpServer::new(move || {
         App::new()
@@ -93,12 +94,14 @@ async fn main() -> std::io::Result<()> {
     .bind(("0.0.0.0", 8080))?
     .run();
 
-    let file_server = HttpServer::new(move || {
-        let path = download_path.clone();
-        App::new().service(Files::new("/", path).show_files_listing())
-    })
-    .bind(("0.0.0.0", 9999))?
-    .run();
+    tokio::spawn(async move {
+        let _ = do_anime_task::auto_update_rename_extract(
+            &video_file_lock_for_task,
+            &database_pool_for_task,
+            &qb_for_task,
+        )
+        .await;
+    });
 
     let (http_result, file_result) = tokio::join!(http_server, file_server);
 
