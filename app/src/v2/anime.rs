@@ -3,9 +3,9 @@ use crate::dao;
 use crate::models::anime_subgroup::AnimeSubgroup;
 use crate::models::{anime_broadcast, anime_list, anime_seed, anime_subgroup, anime_task};
 use crate::mods::spider::{self, Mikan};
-use crate::v2::common::{CONFIG, DB, QB, handle_error};
-use crate::Pool;
-use crate::{api_config, api_db, api_handler, api_qb};
+use crate::v2::common::handle_error;
+use crate::{api_config, api_db, api_handler, api_qb, register_handler};
+use crate::{Pool, WebData, CONFIG, DB, QB, RWLOCK};
 use actix_web::{web, Error, HttpResponse};
 use anyhow::Result;
 use futures::future::join_all;
@@ -54,7 +54,7 @@ pub struct AnimeDetail {
     pub task_info: Vec<anime_task::AnimeTask>,
 }
 
-api_handler!("/home", get_anime_home, "db");
+register_handler!(GET "/home" => get_anime_home);
 api_handler!("/broadcast", get_anime_broadcast, "db", AnimeBroadcastReqJson);
 api_handler!("/broadcast/update", update_anime_broadcast, "config", AnimeBroadcastReqJson);
 api_handler!("/subscribe", subscribe_anime, "db", AnimeSubscribeReqJson);
@@ -69,7 +69,13 @@ api_handler!("/task/update", task_update, "qb");
 api_handler!("/task/delete", task_delete, "qb", SeedReqJson);
 api_handler!("/detail", get_anime_detail, "qb", AnimeMikanIdReqJson);
 
-async fn get_anime_home(db: &mut DB) -> Result<Vec<anime_list::AnimeList>, Error> {
+async fn get_anime_home(
+    db: &mut DB,
+    _qb: QB,
+    _tastk_status: RWLOCK,
+    _video_file_lock: RWLOCK,
+    _config: CONFIG,
+) -> Result<Vec<anime_list::AnimeList>, Error> {
     let mut anime_vec = dao::anime_list::get_by_subscribestatus(db, 1)
         .await
         .map_err(|e| {

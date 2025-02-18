@@ -2,7 +2,7 @@ use actix_files::Files;
 use actix_web::{web, App, HttpServer};
 use api::do_anime_task;
 use diesel::connection::SimpleConnection;
-use diesel::r2d2::{self, ConnectionManager};
+use diesel::r2d2::{self, ConnectionManager, PooledConnection};
 use diesel::SqliteConnection;
 use mods::{config::Config, qb_api::QbitTaskExecutor};
 use routers::*;
@@ -24,6 +24,18 @@ use tokio::sync::RwLock as TokioRwLock;
 extern crate diesel;
 
 pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
+pub type DB = PooledConnection<ConnectionManager<SqliteConnection>>;
+pub type QB = web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>;
+pub type CONFIG = web::Data<Arc<TokioRwLock<Config>>>;
+pub type RWLOCK = web::Data<Arc<TokioRwLock<bool>>>;
+
+pub struct WebData {
+    pub pool: Pool,
+    pub qb: QB,
+    pub task_status: RWLOCK,
+    pub video_file_lock: RWLOCK,
+    pub config: CONFIG,
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -56,7 +68,7 @@ async fn main() -> std::io::Result<()> {
     ));
     drop(conf);
 
-    let tastk_status = Arc::new(TokioRwLock::new(false));
+    let task_status = Arc::new(TokioRwLock::new(false));
     let video_file_lock = Arc::new(TokioRwLock::new(false));
 
     {
@@ -72,6 +84,14 @@ async fn main() -> std::io::Result<()> {
 
     fs::create_dir_all(&download_path).expect("Failed to create download directory");
 
+    let web_data = web::Data::new(WebData {
+        pool: database_pool.clone(),
+        qb: web::Data::new(qb.clone()),
+        task_status: web::Data::new(task_status.clone()),
+        video_file_lock: web::Data::new(video_file_lock.clone()),
+        config: web::Data::new(config.clone()),
+    });
+
     let file_server = HttpServer::new(move || {
         let path = download_path.clone();
         App::new().service(Files::new("/", path).show_files_listing())
@@ -83,9 +103,10 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(database_pool.clone()))
             .app_data(web::Data::new(qb.clone()))
-            .app_data(web::Data::new(tastk_status.clone()))
+            .app_data(web::Data::new(task_status.clone()))
             .app_data(web::Data::new(video_file_lock.clone()))
             .app_data(web::Data::new(config.clone()))
+            .app_data(web_data.clone())
             .configure(anime_routes_v2)
             .configure(setting_routes_v2)
             .configure(ws_routes_v2)

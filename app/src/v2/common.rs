@@ -1,15 +1,3 @@
-use crate::mods::config::Config;
-use crate::mods::qb_api::QbitTaskExecutor;
-use actix_web::web;
-use diesel::r2d2::{ConnectionManager, PooledConnection};
-use diesel::SqliteConnection;
-use std::sync::Arc;
-use tokio::sync::RwLock as TokioRwLock;
-
-pub type DB = PooledConnection<ConnectionManager<SqliteConnection>>;
-pub type QB = web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>;
-pub type CONFIG = web::Data<Arc<TokioRwLock<Config>>>;
-
 #[macro_export]
 macro_rules! api_handler {
     ($path:expr, $func_name:ident, "db") => {
@@ -177,4 +165,54 @@ macro_rules! api_config {
 pub fn handle_error<E: std::fmt::Debug>(e: E, message: &str) -> actix_web::Error {
     log::error!("{}, error: {:?}", message, e);
     actix_web::error::ErrorInternalServerError("Internal server error")
+}
+
+#[macro_export]
+macro_rules! register_handler {
+    (GET $path:expr => $handler:ident) => {
+        paste::paste! {
+            #[actix_web::get($path)]
+            pub async fn [<$handler _handler>](
+                web_data: web::Data<WebData>
+            ) -> Result<HttpResponse, actix_web::Error> {
+                log::info!("{}", stringify!([<$handler _handler>]));
+                let db = &mut web_data.pool.get().map_err(|e| handle_error(e, "failed to get db connection"))?;
+                let result = $handler(
+                    db,
+                    web_data.qb.clone(),
+                    web_data.task_status.clone(),
+                    web_data.video_file_lock.clone(),
+                    web_data.config.clone()
+                ).await.map_err(|e| {
+                    log::error!("{} failed: {:?}", stringify!($handler), e);
+                    actix_web::error::ErrorInternalServerError("Internal server error")
+                })?;
+                Ok(HttpResponse::Ok().json(result))
+            }
+        }
+    };
+
+    (POST $path:expr => $handler:ident, $json_type:ty) => {
+        paste::paste! {
+            #[actix_web::post($path)]
+            pub async fn [<$handler _handler>](
+                web_data: web::Data<WebData>,
+                item: web::Json<$json_type>,
+            ) -> Result<HttpResponse, actix_web::Error> {
+                log::info!("{}, {:?}", stringify!([<$handler _handler>]), item);
+                let db = &mut web_data.pool.get().map_err(|e| handle_error(e, "failed to get db connection"))?;
+                let result = $handler(
+                    db,
+                    web_data.qb.clone(),
+                    web_data.config.clone(),
+                    web_data.status.clone(),
+                    item.into_inner(),
+                ).await.map_err(|e| {
+                    log::error!("{} failed: {:?}", stringify!($handler), e);
+                    actix_web::error::ErrorInternalServerError("Internal server error")
+                })?;
+                Ok(HttpResponse::Ok().json(result))
+            }
+        }
+    };
 }
