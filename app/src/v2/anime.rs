@@ -3,9 +3,9 @@ use crate::dao;
 use crate::models::anime_subgroup::AnimeSubgroup;
 use crate::models::{anime_broadcast, anime_list, anime_seed, anime_subgroup, anime_task};
 use crate::mods::spider::{self, Mikan};
+use crate::register_handler;
 use crate::v2::common::handle_error;
-use crate::{api_config, api_db, api_handler, api_qb, register_handler};
-use crate::{Pool, WebData, CONFIG, DB, QB, RWLOCK};
+use crate::{WebData, DB};
 use actix_web::{web, Error, HttpResponse};
 use anyhow::Result;
 use futures::future::join_all;
@@ -55,27 +55,26 @@ pub struct AnimeDetail {
 }
 
 register_handler!(GET "/home" => get_anime_home);
-api_handler!("/broadcast", get_anime_broadcast, "db", AnimeBroadcastReqJson);
-api_handler!("/broadcast/update", update_anime_broadcast, "config", AnimeBroadcastReqJson);
-api_handler!("/subscribe", subscribe_anime, "db", AnimeSubscribeReqJson);
-api_handler!("/search", search_anime, "db", AnimeKeyWordReqJson);
-api_handler!("/subgroup", get_subgroup, "db");
-api_handler!("/seed", get_anime_seed, "db", AnimeMikanIdReqJson);
-api_handler!("/seed/update", seed_update, "db", AnimeMikanIdReqJson);
-api_handler!("/seed/download", seed_download, "qb", SeedReqJson);
-api_handler!("seed/delete", seed_delete, "db", AnimeMikanIdReqJson);
-api_handler!("/task", get_task, "db", AnimeMikanIdReqJson);
-api_handler!("/task/update", task_update, "qb");
-api_handler!("/task/delete", task_delete, "qb", SeedReqJson);
-api_handler!("/detail", get_anime_detail, "qb", AnimeMikanIdReqJson);
+register_handler!(POST "/broadcast" => get_anime_broadcast, AnimeBroadcastReqJson);
+register_handler!(POST "/broadcast/update" => update_anime_broadcast, AnimeBroadcastReqJson);
+register_handler!(POST "/subscribe" => subscribe_anime, AnimeSubscribeReqJson);
+register_handler!(POST "/search" => search_anime, AnimeKeyWordReqJson);
+register_handler!(GET "/subgroup" => get_subgroup);
+register_handler!(POST "/seed" => get_anime_seed, AnimeMikanIdReqJson);
+register_handler!(POST "/seed/update" => seed_update, AnimeMikanIdReqJson);
+register_handler!(POST "/seed/download" => seed_download, SeedReqJson);
+register_handler!(POST "seed/delete" => seed_delete, AnimeMikanIdReqJson);
+register_handler!(POST "/task" => get_task, AnimeMikanIdReqJson);
+register_handler!(GET "/task/update" => task_update);
+register_handler!(POST "/task/delete" => task_delete, SeedReqJson);
+register_handler!(POST "/detail" => get_anime_detail, AnimeMikanIdReqJson);
 
-async fn get_anime_home(
-    db: &mut DB,
-    _qb: QB,
-    _tastk_status: RWLOCK,
-    _video_file_lock: RWLOCK,
-    _config: CONFIG,
-) -> Result<Vec<anime_list::AnimeList>, Error> {
+async fn get_anime_home(web_data: web::Data<WebData>) -> Result<Vec<anime_list::AnimeList>, Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let mut anime_vec = dao::anime_list::get_by_subscribestatus(db, 1)
         .await
         .map_err(|e| {
@@ -112,7 +111,15 @@ async fn get_anime_home(
     Ok(anime_vec)
 }
 
-async fn subscribe_anime(db: &mut DB, item: AnimeSubscribeReqJson) -> Result<(), Error> {
+async fn subscribe_anime(
+    web_data: web::Data<WebData>,
+    item: web::Json<AnimeSubscribeReqJson>,
+) -> Result<(), Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let mikan_id = item.mikan_id;
     let subscribe_status = if item.subscribe_status == 1 { 0 } else { 1 };
 
@@ -127,26 +134,30 @@ async fn subscribe_anime(db: &mut DB, item: AnimeSubscribeReqJson) -> Result<(),
 }
 
 async fn get_anime_detail(
-    db: &mut DB,
-    qb: QB,
-    item: AnimeMikanIdReqJson,
+    web_data: web::Data<WebData>,
+    item: web::Json<AnimeMikanIdReqJson>,
 ) -> Result<AnimeDetail, Error> {
-    let mikan_id = item.mikan_id;
-    let tmp_item = AnimeMikanIdReqJson { mikan_id };
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
 
-    task_update(db, qb)
+    let mikan_id = item.mikan_id;
+    let tmp_item = web::Json(AnimeMikanIdReqJson { mikan_id });
+
+    task_update(web_data.clone())
         .await
         .map_err(|e| handle_error(e, "get_anime_detail, task_update failed"))?;
     let anime = get_anime_info(db, mikan_id)
         .await
         .map_err(|e| handle_error(e, "get_anime_detail, get_anime_info failed"))?;
-    let seed_vec = get_anime_seed(db, tmp_item)
+    let seed_vec = get_anime_seed(web_data.clone(), tmp_item)
         .await
         .map_err(|e| handle_error(e, "get_anime_detail, get_anime_seed failed"))?;
-    let task_vec = get_task(db, item)
+    let task_vec = get_task(web_data.clone(), item)
         .await
         .map_err(|e| handle_error(e, "get_anime_detail, get_task failed"))?;
-    let subgroup_vec = get_subgroup(db)
+    let subgroup_vec = get_subgroup(web_data.clone())
         .await
         .map_err(|e| handle_error(e, "get_anime_detail, get_subgroup failed"))?;
     let reorderd_subgroups = reoder_subgroups(subgroup_vec);
@@ -171,9 +182,14 @@ async fn get_anime_info(db: &mut DB, mikan_id: i32) -> Result<anime_list::AnimeL
 }
 
 async fn get_anime_broadcast(
-    db: &mut DB,
-    item: AnimeBroadcastReqJson,
+    web_data: web::Data<WebData>,
+    item: web::Json<AnimeBroadcastReqJson>,
 ) -> Result<Vec<anime_list::AnimeList>, Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let broadcast_list: Vec<anime_broadcast::AnimeBroadcast> =
         dao::anime_broadcast::get_by_year_season(db, item.year, item.season)
             .await
@@ -206,10 +222,14 @@ async fn get_anime_broadcast(
 }
 
 async fn update_anime_broadcast(
-    db: &mut DB,
-    config: CONFIG,
-    item: AnimeBroadcastReqJson,
+    web_data: web::Data<WebData>,
+    item: web::Json<AnimeBroadcastReqJson>,
 ) -> Result<(), Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let year = item.year;
     let season = item.season;
 
@@ -256,7 +276,7 @@ async fn update_anime_broadcast(
             )
         })?;
 
-    let config = config.read().await;
+    let config = web_data.config.read().await;
     let save_path = config.img_path.clone();
     drop(config);
 
@@ -281,9 +301,14 @@ pub async fn download_anime_img(
 }
 
 async fn get_anime_seed(
-    db: &mut DB,
-    item: AnimeMikanIdReqJson,
+    web_data: web::Data<WebData>,
+    item: web::Json<AnimeMikanIdReqJson>,
 ) -> Result<Vec<anime_seed::AnimeSeed>, Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let seed_info = dao::anime_seed::get_anime_seed_by_mikan_id(db, item.mikan_id)
         .await
         .map_err(|e| {
@@ -296,7 +321,14 @@ async fn get_anime_seed(
     Ok(seed_info)
 }
 
-async fn get_subgroup(db: &mut DB) -> Result<Vec<anime_subgroup::AnimeSubgroup>, Error> {
+async fn get_subgroup(
+    web_data: web::Data<WebData>,
+) -> Result<Vec<anime_subgroup::AnimeSubgroup>, Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let subgroup_info = dao::anime_subgroup::get_all(db)
         .await
         .map_err(|e| handle_error(e, "get_subgroup, dao::anime_subgroup::get_all failed"))?;
@@ -305,9 +337,14 @@ async fn get_subgroup(db: &mut DB) -> Result<Vec<anime_subgroup::AnimeSubgroup>,
 }
 
 async fn get_task(
-    db: &mut DB,
-    item: AnimeMikanIdReqJson,
+    web_data: web::Data<WebData>,
+    item: web::Json<AnimeMikanIdReqJson>,
 ) -> Result<Vec<anime_task::AnimeTask>, Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let task_info = dao::anime_task::get_exist_anime_task_by_mikan_id(db, item.mikan_id)
         .await
         .map_err(|e| {
@@ -320,7 +357,15 @@ async fn get_task(
     Ok(task_info)
 }
 
-pub async fn seed_update(db: &mut DB, item: AnimeMikanIdReqJson) -> Result<(), Error> {
+pub async fn seed_update(
+    web_data: web::Data<WebData>,
+    item: web::Json<AnimeMikanIdReqJson>,
+) -> Result<(), Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let mikan = spider::Mikan::new()?;
     let bangumi = spider::Bangumi::new()?;
 
@@ -425,7 +470,15 @@ pub async fn seed_update(db: &mut DB, item: AnimeMikanIdReqJson) -> Result<(), E
     Ok(())
 }
 
-pub async fn seed_delete(db: &mut DB, item: AnimeMikanIdReqJson) -> Result<(), Error> {
+pub async fn seed_delete(
+    web_data: web::Data<WebData>,
+    item: web::Json<AnimeMikanIdReqJson>,
+) -> Result<(), Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     dao::anime_seed::delete_anime_seed_by_mikan_id(db, item.mikan_id)
         .await
         .map_err(|e| {
@@ -447,9 +500,17 @@ pub async fn seed_delete(db: &mut DB, item: AnimeMikanIdReqJson) -> Result<(), E
     Ok(())
 }
 
-pub async fn seed_download(db: &mut DB, qb: QB, item: SeedReqJson) -> Result<(), Error> {
+pub async fn seed_download(
+    web_data: web::Data<WebData>,
+    item: web::Json<SeedReqJson>,
+) -> Result<(), Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let mikan = spider::Mikan::new()?;
-    let qb = qb.read().await;
+    let qb = web_data.qb.read().await;
 
     if !qb.is_login {
         return Err(handle_error(
@@ -480,11 +541,19 @@ pub async fn seed_download(db: &mut DB, qb: QB, item: SeedReqJson) -> Result<(),
     Ok(())
 }
 
-pub async fn task_delete(db: &mut DB, qb: QB, item: SeedReqJson) -> Result<(), Error> {
+pub async fn task_delete(
+    web_data: web::Data<WebData>,
+    item: web::Json<SeedReqJson>,
+) -> Result<(), Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let torrent_name =
         get_torrent_name_from_url(&item.seed_url).unwrap_or_else(|| item.seed_url.clone());
 
-    let qb = qb.read().await;
+    let qb = web_data.qb.read().await;
 
     qb.qb_api_del_torrent(&torrent_name)
         .await
@@ -501,8 +570,13 @@ pub async fn task_delete(db: &mut DB, qb: QB, item: SeedReqJson) -> Result<(), E
     Ok(())
 }
 
-pub async fn task_update(db: &mut DB, qb: QB) -> Result<(), Error> {
-    let qb = qb.read().await;
+pub async fn task_update(web_data: web::Data<WebData>) -> Result<(), Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
+    let qb = web_data.qb.read().await;
     do_anime_task::update_qb_task_status(&qb, db)
         .await
         .map_err(|e| {
@@ -515,9 +589,14 @@ pub async fn task_update(db: &mut DB, qb: QB) -> Result<(), Error> {
 }
 
 async fn search_anime(
-    db: &mut DB,
-    item: AnimeKeyWordReqJson,
+    web_data: web::Data<WebData>,
+    item: web::Json<AnimeKeyWordReqJson>,
 ) -> Result<Vec<anime_list::AnimeList>, Error> {
+    let db = &mut web_data
+        .pool
+        .get()
+        .map_err(|e| handle_error(e, "failed to get db connection"))?;
+
     let mut result = dao::anime_list::search_by_anime_name(db, &item.key)
         .await
         .map_err(|e| {
@@ -531,16 +610,16 @@ async fn search_anime(
     Ok(result)
 }
 
-fn convert_json_seed_to_anime_seed(sj: SeedReqJson) -> anime_seed::AnimeSeed {
+fn convert_json_seed_to_anime_seed(sj: web::Json<SeedReqJson>) -> anime_seed::AnimeSeed {
     anime_seed::AnimeSeed {
         id: None,
         mikan_id: sj.mikan_id,
         subgroup_id: sj.subgroup_id,
         episode: sj.episode,
-        seed_name: sj.seed_name,
-        seed_url: sj.seed_url,
+        seed_name: sj.seed_name.clone(),
+        seed_url: sj.seed_url.clone(),
         seed_status: sj.seed_status,
-        seed_size: sj.seed_size,
+        seed_size: sj.seed_size.clone(),
     }
 }
 

@@ -2,7 +2,9 @@ use crate::api::do_anime_task;
 use crate::mods::config::Config;
 use crate::mods::qb_api::QbitTaskExecutor;
 use crate::Pool;
-use actix_web::{get, post, web, Error, HttpResponse};
+use crate::WebData;
+use actix_web::web;
+use actix_web::{get, post, Error, HttpResponse};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -50,8 +52,7 @@ pub async fn change_task_interval_handler(
 
     let interval = item.interval.clone();
     let run_handle = actix::spawn(async move {
-        do_anime_task::change_task_interval(interval, &status, &qb_clone, &mut db_connection)
-            .await;
+        do_anime_task::change_task_interval(interval, &status, &qb_clone, &mut db_connection).await;
     });
     drop(run_handle);
     log::info!("change schedule task with new interval: {}", item.interval);
@@ -80,6 +81,7 @@ pub async fn reload_task_handler(
     pool: web::Data<Pool>,
     qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
     config: web::Data<Arc<TokioRwLock<Config>>>,
+    web_data: web::Data<WebData>,
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool.get().unwrap();
     Ok(
@@ -88,6 +90,7 @@ pub async fn reload_task_handler(
             db_connection,
             qb.get_ref(),
             config.get_ref(),
+            web_data,
         )
         .await
         {

@@ -5,7 +5,8 @@ use crate::models::anime_task::{AnimeTask, AnimeTaskJson};
 use crate::mods::config::Config;
 use crate::mods::{anime_filter, qb_api::QbitTaskExecutor, spider::Mikan, video_proccessor};
 use crate::v2::anime::AnimeMikanIdReqJson;
-use crate::{dao, v2};
+use crate::{dao, v2, WebData};
+use actix_web::web;
 
 use anyhow::Error;
 use chrono::prelude::*;
@@ -176,6 +177,7 @@ pub async fn create_anime_task_from_exist_files(
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     qb: &Arc<TokioRwLock<QbitTaskExecutor>>,
     config: &Arc<TokioRwLock<Config>>,
+    web_data: web::Data<WebData>,
 ) -> Result<(), Error> {
     let video_file_lock = video_file_lock.read().await;
 
@@ -255,7 +257,7 @@ pub async fn create_anime_task_from_exist_files(
         mikan.download_img(&img_url, &save_path).await.unwrap();
 
         // Update anime seed
-        if v2::anime::seed_update(db_connection, AnimeMikanIdReqJson { mikan_id })
+        if v2::anime::seed_update(web_data.clone(), web::Json(AnimeMikanIdReqJson { mikan_id }))
             .await
             .is_err()
         {
@@ -263,7 +265,7 @@ pub async fn create_anime_task_from_exist_files(
                 "Failed to update seed for anime: {}, retrying once.",
                 anime.anime_name
             );
-            if v2::anime::seed_update(db_connection, AnimeMikanIdReqJson { mikan_id })
+            if v2::anime::seed_update(web_data.clone(), web::Json(AnimeMikanIdReqJson { mikan_id }))
                 .await
                 .is_err()
             {
