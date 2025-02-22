@@ -503,7 +503,7 @@ impl QbitTaskExecutor {
             let app_info_response_text = app_info_response.text().await.unwrap();
             let json: serde_json::Value = serde_json::from_str(&app_info_response_text).unwrap();
             download_path = json["save_path"].to_string().replace("\"", "");
-            log::info!("download path: {:?}", download_path);
+            // log::debug!("download path: {:?}", download_path);
         } else {
             log::info!(
                 "[QB API] Unable to access qb web api: {}",
