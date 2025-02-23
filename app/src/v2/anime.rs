@@ -2,6 +2,7 @@ use crate::api::do_anime_task;
 use crate::dao;
 use crate::models::anime_subgroup::AnimeSubgroup;
 use crate::models::{anime_broadcast, anime_list, anime_seed, anime_subgroup, anime_task};
+use crate::mods::spider::BangumiInfo;
 use crate::mods::spider::{self, Mikan};
 use crate::register_handler;
 use crate::v2::common::handle_error;
@@ -372,16 +373,22 @@ pub async fn seed_update(
     let mikan_id = item.mikan_id;
     let (bangumi_id, total_episodes) = mikan.get_bangumi_id_and_total_episodes(mikan_id).await?;
 
-    // use crate::mods::spider::BangumiInfo;
-    // let mut bangumi_info = BangumiInfo {
-    //     bangumi_id,
-    //     total_episodes,
-    //     bangumi_rank: "暂无".to_string(),
-    //     bangumi_summary: "暂无".to_string(),
-    //     website: "暂无".to_string(),
-    // };
+    let mut bangumi_info = BangumiInfo {
+        bangumi_id,
+        total_episodes,
+        bangumi_rank: "暂无".to_string(),
+        bangumi_summary: "暂无".to_string(),
+        website: "暂无".to_string(),
+    };
 
-    let mut bangumi_info = bangumi.get_bangumi_info(bangumi_id).await?;
+    match bangumi.get_bangumi_info(bangumi_id).await {
+        Ok(info) => {
+            bangumi_info = info;
+        }
+        Err(e) => {
+            log::error!("get bangumi info failed, just bypass: {:?}", e);
+        }
+    }
 
     if bangumi_info.total_episodes == -1 {
         bangumi_info.total_episodes = total_episodes;
