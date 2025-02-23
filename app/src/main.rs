@@ -68,6 +68,11 @@ async fn main() -> std::io::Result<()> {
     ));
     drop(conf);
 
+    {
+        let qb_unlock = qb.write().await;
+        qb_unlock.qb_api_set_download_path().await.unwrap();
+    }
+
     let task_status = Arc::new(TokioRwLock::new(false));
     let video_file_lock = Arc::new(TokioRwLock::new(false));
 

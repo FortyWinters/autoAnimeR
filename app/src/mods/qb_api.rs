@@ -5,7 +5,8 @@ use chrono::DateTime;
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::env;
 use std::time::{Duration, UNIX_EPOCH};
 
 pub fn handle_error<E: std::fmt::Debug>(e: E, _message: &str) -> AnimeError {
@@ -169,10 +170,7 @@ impl QbitTaskExecutor {
         Ok(())
     }
 
-    pub async fn qb_api_torrent_info(
-        &self,
-        torrent_name: &str,
-    ) -> Result<TorrentInfo, AnimeError> {
+    pub async fn qb_api_torrent_info(&self, torrent_name: &str) -> Result<TorrentInfo, AnimeError> {
         if !self.is_login {
             return Err(AnimeError::new(
                 "[QB API] qbittorrent client not started".to_string(),
@@ -193,10 +191,9 @@ impl QbitTaskExecutor {
             let torrent_info_response_text = torrent_info_response.text().await.unwrap();
             let json: serde_json::Value =
                 serde_json::from_str(&torrent_info_response_text).unwrap();
-            match TorrentInfo::new(&json[0]) 
-            {
+            match TorrentInfo::new(&json[0]) {
                 Ok(torrent_info) => Ok(torrent_info),
-                Err(e) => Err(e)
+                Err(e) => Err(e),
             }
         } else {
             log::info!(
@@ -516,6 +513,33 @@ impl QbitTaskExecutor {
             _ => Ok(download_path),
         }
     }
+
+    pub async fn qb_api_set_download_path(&self) -> Result<(), AnimeError> {
+        let app_set_preferences_endpoint = self.host.clone() + "api/v2/app/setPreferences";
+
+        let mut param = HashMap::new();
+        param.insert(
+            "json",
+            format!(
+                r#"{{"save_path": "{}/{}"}}"#,
+                env::current_dir().unwrap().to_string_lossy(),
+                self.download_path
+            ),
+        );
+
+        if let Ok(res) = self
+            .qbt_client
+            .post(app_set_preferences_endpoint.clone())
+            .header("Cookie", &self.cookie)
+            .form(&param)
+            .send()
+            .await
+        {
+            let res_text = res.text().await.unwrap();
+            println!("{:?}", res_text)
+        }
+        Ok(())
+    }
 }
 
 unsafe impl Send for QbitTaskExecutor {}
@@ -607,27 +631,30 @@ mod test {
 
     #[tokio::test]
     async fn test_qb_api_add_torrent() {
-        let config = Config::load_config("./config/config.json").await.unwrap();
+        let config = Config::load_config("./config/config.yaml").await.unwrap();
         let qb_task_executor = QbitTaskExecutor::new_with_config(&config).await.unwrap();
 
-        let anime_name = "test".to_string();
-        let anime_seed_info = AnimeSeed {
-            id: Some(100),
-            mikan_id: 3143,
-            subgroup_id: 382,
-            episode: 3,
-            seed_name:
-                "【喵萌奶茶屋】★10月新番★[米基与达利 / Migi to Dali][03][1080p][简日双语][招募翻译]"
-                    .to_string(),
-            seed_url: "/Download/20231021/bdd2f547cdfd8a38011a5ea451d65379c9572305.torrent"
-                .to_string(),
-            seed_status: 0,
-            seed_size: "349.4MB".to_string(),
-        };
+        // let anime_name = "test".to_string();
+        // let anime_seed_info = AnimeSeed {
+        //     id: Some(100),
+        //     mikan_id: 3143,
+        //     subgroup_id: 382,
+        //     episode: 3,
+        //     seed_name:
+        //         "【喵萌奶茶屋】★10月新番★[米基与达利 / Migi to Dali][03][1080p][简日双语][招募翻译]"
+        //             .to_string(),
+        //     seed_url: "/Download/20231021/bdd2f547cdfd8a38011a5ea451d65379c9572305.torrent"
+        //         .to_string(),
+        //     seed_status: 0,
+        //     seed_size: "349.4MB".to_string(),
+        // };
 
-        qb_task_executor
-            .qb_api_add_torrent(&anime_name, &anime_seed_info)
-            .await
-            .unwrap();
+        // qb_task_executor
+        //     .qb_api_add_torrent(&anime_name, &anime_seed_info)
+        //     .await
+        //     .unwrap();
+        let _r = qb_task_executor.qb_api_set_download_path().await.unwrap();
+        let r = qb_task_executor.qb_api_get_download_path().await.unwrap();
+        println!("{:?}", r);
     }
 }
