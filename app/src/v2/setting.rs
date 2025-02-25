@@ -79,7 +79,6 @@ pub async fn get_task_status_handler(
 pub async fn reload_task_handler(
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
     pool: web::Data<Pool>,
-    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
     config: web::Data<Arc<TokioRwLock<Config>>>,
     web_data: web::Data<WebData>,
 ) -> Result<HttpResponse, Error> {
@@ -88,7 +87,6 @@ pub async fn reload_task_handler(
         match do_anime_task::create_anime_task_from_exist_files(
             &video_file_lock,
             db_connection,
-            qb.get_ref(),
             config.get_ref(),
             web_data,
         )

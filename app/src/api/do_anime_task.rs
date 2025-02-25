@@ -175,15 +175,14 @@ pub async fn get_video_config(
 pub async fn create_anime_task_from_exist_files(
     video_file_lock: &Arc<TokioRwLock<bool>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
-    qb: &Arc<TokioRwLock<QbitTaskExecutor>>,
     config: &Arc<TokioRwLock<Config>>,
     web_data: web::Data<WebData>,
 ) -> Result<(), Error> {
     let video_file_lock = video_file_lock.read().await;
 
     let download_path = {
-        let qb = qb.read().await;
-        qb.qb_api_get_download_path().await.unwrap()
+        let config_unlock = config.read().await;
+        config_unlock.download_path.clone()
     };
 
     let (_, video_config) = get_video_config(&download_path)
@@ -639,6 +638,7 @@ pub async fn auto_update_rename_extract(
     video_file_lock: &Arc<TokioRwLock<bool>>,
     pool: &diesel::r2d2::Pool<ConnectionManager<diesel::SqliteConnection>>,
     qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
+    config: &Arc<TokioRwLock<Config>>
 ) -> Result<(), Error> {
     log::info!("Start auto rename and update thread");
     let mut lazy_mode_cnt = 0;
@@ -654,6 +654,7 @@ pub async fn auto_update_rename_extract(
                         video_file_lock,
                         qb_task_executor,
                         &mut db_connection,
+                        config
                     )
                     .await
                     .map_err(|e| handle_error(e, "Failed to execute rename task"))?;
@@ -740,10 +741,14 @@ pub async fn auto_rename_and_extract_handler(
     video_file_lock: &Arc<TokioRwLock<bool>>,
     qb_task_executor: &Arc<TokioRwLock<QbitTaskExecutor>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    config: &Arc<TokioRwLock<Config>>
 ) -> Result<(), Error> {
     let _guard = video_file_lock.write().await;
     let qb = qb_task_executor.read().await;
-    let download_path = qb.qb_api_get_download_path().await.unwrap();
+    let download_path = {
+        let config_unlock = config.read().await;
+        config_unlock.download_path.clone()
+    };
 
     let (mut file, mut video_config) = get_video_config(&download_path)
         .await
@@ -759,7 +764,7 @@ pub async fn auto_rename_and_extract_handler(
     for task in task_list {
         // rename
         if let Ok((cur_file_name, cur_total_file_path)) =
-            rename_file(&qb, db_connection, &task).await
+            rename_file(&download_path, &qb, db_connection, &task).await
         {
             dao::anime_task::update_task_status(
                 db_connection,
@@ -860,19 +865,11 @@ pub async fn auto_rename_and_extract_handler(
 
 #[allow(dead_code)]
 pub async fn rename_file(
+    path: &str,
     qb_task_executor: &QbitTaskExecutor,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
     anime_task: &AnimeTask,
 ) -> Result<(String, String), Error> {
-    let path = qb_task_executor
-        .qb_api_get_download_path()
-        .await
-        .map_err(|e| {
-            handle_error(
-                e,
-                "Faile to get download path, please check your qbittorrent client config",
-            )
-        })?;
 
     let anime_name = dao::anime_list::get_by_mikanid(db_connection, anime_task.mikan_id)
         .await

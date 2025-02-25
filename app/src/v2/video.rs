@@ -36,13 +36,13 @@ pub struct VideoDetail {
 pub async fn get_video_detail_handler(
     item: web::Json<TorrentName>,
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
-    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
+    config: web::Data<Arc<TokioRwLock<Config>>>,
     pool: web::Data<Pool>,
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool
         .get()
         .map_err(|e| handle_error(e, "failed to get db connection"))?;
-    match get_anime_detail(&item.torrent_name, video_file_lock, qb, db_connection).await {
+    match get_anime_detail(&item.torrent_name, video_file_lock, config, db_connection).await {
         Ok(res) => Ok(HttpResponse::Ok().json(res)),
         Err(e) => Err(Error::from(e)),
     }
@@ -51,7 +51,7 @@ pub async fn get_video_detail_handler(
 async fn get_anime_detail(
     torrent_name: &str,
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
-    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
+    config: web::Data<Arc<TokioRwLock<Config>>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
 ) -> Result<VideoDetail, Error> {
     let anime_task = dao::anime_task::get_by_torrent_name(db_connection, torrent_name)
@@ -77,7 +77,7 @@ async fn get_anime_detail(
 
     let video_path = format!("{}/{}", file_path, anime_task.filename);
 
-    let subtitle_vec = match get_subtitle_vec(&anime_task.filename, video_file_lock, qb).await {
+    let subtitle_vec = match get_subtitle_vec(&anime_task.filename, video_file_lock, config).await {
         Ok(res) => res
             .into_iter()
             .map(|s| format!("{}/{}", file_path, s))
@@ -99,11 +99,13 @@ async fn get_anime_detail(
 async fn get_subtitle_vec(
     video_name: &str,
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
-    qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
+    config: web::Data<Arc<TokioRwLock<Config>>>,
 ) -> Result<Vec<String>, Error> {
     let _guard = video_file_lock.read().await;
-    let qb = qb.read().await;
-    let download_path = qb.qb_api_get_download_path().await.unwrap();
+    let download_path = {
+        let config_unlock = config.read().await;
+        config_unlock.download_path.clone()
+    };
 
     let (_, video_config) = do_anime_task::get_video_config(&download_path)
         .await
@@ -126,13 +128,20 @@ pub async fn extract_subtitle_handle(
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
     qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
     pool: web::Data<Pool>,
+    config: web::Data<Arc<TokioRwLock<Config>>>,
 ) -> Result<HttpResponse, Error> {
     let db_connection = &mut pool
         .get()
         .map_err(|e| handle_error(e, "failed to get db connection"))?;
-    extract_subtitle(&item.torrent_name, video_file_lock, qb, db_connection)
-        .await
-        .map_err(|e| handle_error(e, "Failed to extract subtitle"))?;
+    extract_subtitle(
+        &item.torrent_name,
+        video_file_lock,
+        qb,
+        db_connection,
+        config,
+    )
+    .await
+    .map_err(|e| handle_error(e, "Failed to extract subtitle"))?;
     Ok(HttpResponse::Ok().json("ok"))
 }
 
@@ -141,6 +150,7 @@ pub async fn extract_subtitle(
     video_file_lock: web::Data<Arc<TokioRwLock<bool>>>,
     qb: web::Data<Arc<TokioRwLock<QbitTaskExecutor>>>,
     db_connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>,
+    config: web::Data<Arc<TokioRwLock<Config>>>,
 ) -> Result<(), Error> {
     let anime_task = dao::anime_task::get_by_torrent_name(db_connection, torrent_name)
         .await
@@ -152,22 +162,34 @@ pub async fn extract_subtitle(
             .map_err(|e| handle_error(e, "Failed to get finished task"))?;
 
         if nb_new_finished_task > 0 {
-            do_anime_task::auto_rename_and_extract_handler(&video_file_lock, &qb, db_connection)
-                .await
-                .map_err(|e| handle_error(e, "Failed to get finished task"))?;
+            do_anime_task::auto_rename_and_extract_handler(
+                &video_file_lock,
+                &qb,
+                db_connection,
+                &config,
+            )
+            .await
+            .map_err(|e| handle_error(e, "Failed to get finished task"))?;
         }
         return Ok(());
     }
 
     if anime_task.rename_status == 0 {
-        do_anime_task::auto_rename_and_extract_handler(&video_file_lock, &qb, db_connection)
-            .await
-            .map_err(|e| handle_error(e, "Failed to execute rename task"))?;
+        do_anime_task::auto_rename_and_extract_handler(
+            &video_file_lock,
+            &qb,
+            db_connection,
+            &config,
+        )
+        .await
+        .map_err(|e| handle_error(e, "Failed to execute rename task"))?;
         return Ok(());
     }
 
-    let qb = qb.read().await;
-    let download_path = qb.qb_api_get_download_path().await.unwrap();
+    let download_path = {
+        let config_unlock = config.read().await;
+        config_unlock.download_path.clone()
+    };
     let anime_name = dao::anime_list::get_by_mikanid(db_connection, anime_task.mikan_id)
         .await
         .map_err(|e| handle_error(e, "Failed to get anime name."))?
@@ -573,19 +595,14 @@ mod test {
             .build(ConnectionManager::<SqliteConnection>::new(database_url))
             .expect("Failed to create pool.");
 
-        let qb = Arc::new(TokioRwLock::new(
-            QbitTaskExecutor::new_with_config(&config)
-                .await
-                .expect("Failed to create qb client"),
-        ));
-
         let db_connection = &mut database_pool.get().unwrap();
 
         let video_file_lock = Arc::new(TokioRwLock::new(false));
+        let config_lock = Arc::new(TokioRwLock::new(config));
         let res = get_anime_detail(
             &"cf86dfac0c05125eac6fa800f4f1ee6227e12a2e.torrent".to_string(),
             web::Data::new(video_file_lock),
-            web::Data::new(qb),
+            web::Data::new(config_lock),
             db_connection,
         )
         .await

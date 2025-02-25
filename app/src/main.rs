@@ -68,11 +68,6 @@ async fn main() -> std::io::Result<()> {
     ));
     drop(conf);
 
-    {
-        let qb_unlock = qb.write().await;
-        qb_unlock.qb_api_set_download_path().await.unwrap();
-    }
-
     let task_status = Arc::new(TokioRwLock::new(false));
     let video_file_lock = Arc::new(TokioRwLock::new(false));
 
@@ -86,6 +81,7 @@ async fn main() -> std::io::Result<()> {
     let qb_for_task = Arc::clone(&qb);
     let video_file_lock_for_task = Arc::clone(&video_file_lock);
     let database_pool_for_task = database_pool.clone();
+    let config_for_task = Arc::clone(&config);
 
     fs::create_dir_all(&download_path).expect("Failed to create download directory");
 
@@ -125,6 +121,7 @@ async fn main() -> std::io::Result<()> {
             &video_file_lock_for_task,
             &database_pool_for_task,
             &qb_for_task,
+            &config_for_task,
         )
         .await;
     });

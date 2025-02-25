@@ -230,7 +230,18 @@ impl QbitTaskExecutor {
 
         let seed_path = format!("downloads/seed/{}/{}", anime_seed_info.mikan_id, file_name);
         let file_byte = std::fs::read(seed_path).unwrap();
-        let save_path = anime_name.to_string() + "(" + &anime_seed_info.mikan_id.to_string() + ")";
+
+        // {exec_path}/{download_path}/{anime_path}
+        let save_path = format!(
+            "{}/{}/{}",
+            env::current_dir()
+                .map_err(|e| handle_error(e, "message"))?
+                .to_str()
+                .unwrap(), // exec_path
+            self.download_path, // download_path
+            anime_name.to_string() + "(" + &anime_seed_info.mikan_id.to_string() + ")"  // anime_path
+        );
+
         let form = Form::new()
             .part("torrent", Part::bytes(file_byte).file_name(file_name))
             .text("savepath", save_path);
@@ -264,7 +275,7 @@ impl QbitTaskExecutor {
             .qbt_client
             .post(delete_endpoint.clone())
             .header("Cookie", &self.cookie)
-            .form(&[("hashes", hashes), ("deleteFiles", String::from("false"))])
+            .form(&[("hashes", hashes), ("deleteFiles", String::from("true"))])
             .send()
             .await
         {
@@ -483,11 +494,13 @@ impl QbitTaskExecutor {
         Ok(torrent_hash_set)
     }
 
-    pub async fn qb_api_get_download_path(&self) -> Result<String, AnimeError> {
-        if !self.is_login {
-            return Ok(self.download_path.clone());
-        }
+    /*
+        Return the default download path of qBittorrent, which may not be the same as
+        autoAnime's download path.
 
+        This API is not suggested to be used in any case other than for testing.
+    */
+    pub async fn qb_api_get_download_path(&self) -> Result<String, AnimeError> {
         let app_info_endpoint = self.host.clone() + "api/v2/app/preferences";
         let mut download_path = String::from("");
         if let Ok(app_info_response) = self
@@ -507,11 +520,7 @@ impl QbitTaskExecutor {
                 app_info_endpoint
             );
         }
-
-        match self.deploy_mode.as_str() {
-            "docker" => Ok(self.download_path.clone()),
-            _ => Ok(download_path),
-        }
+        Ok(download_path)
     }
 
     pub async fn qb_api_set_download_path(&self) -> Result<(), AnimeError> {
@@ -654,7 +663,7 @@ mod test {
         //     .await
         //     .unwrap();
         let _r = qb_task_executor.qb_api_set_download_path().await.unwrap();
-        let r = qb_task_executor.qb_api_get_download_path().await.unwrap();
-        println!("{:?}", r);
+        let _r = qb_task_executor.qb_api_get_download_path().await.unwrap();
+        //println!("{:?}", r);
     }
 }
